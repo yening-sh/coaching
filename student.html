@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>AI学习助手 · 学生端</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --primary: #4A7CFF;
+    --primary-light: #EEF2FF;
+    --success: #22C55E;
+    --error: #EF4444;
+    --warning: #F97316;
+    --text: #1A1A2E;
+    --text-sub: #6B7280;
+    --border: #E5E7EB;
+    --bg: #F8F9FB;
+    --white: #ffffff;
+    --card-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+    background: #e8eaf0;
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .phone {
+    width: 100%;
+    max-width: 390px;
+    min-height: 100vh;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(0,0,0,0.15);
+  }
+
+  .status-bar {
+    background: var(--white);
+    padding: 12px 20px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-sub);
+    flex-shrink: 0;
+  }
+
+  .page { display: none; flex-direction: column; flex: 1; overflow-y: auto; padding-bottom: 80px; }
+  .page.active { display: flex; }
+  .page.no-tab { padding-bottom: 0; }
+
+  .tab-bar {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 390px;
+    background: var(--white);
+    border-top: 1px solid var(--border);
+    display: flex;
+    z-index: 100;
+  }
+  .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 0 14px;
+    cursor: pointer;
+    color: var(--text-sub);
+    font-size: 11px;
+    gap: 3px;
+    transition: color 0.2s;
+  }
+  .tab-item.active { color: var(--primary); }
+  .tab-item .icon { font-size: 22px; }
+
+  .card {
+    background: var(--white);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: var(--card-shadow);
+  }
+
+  .btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:active { background: #3a6ce8; transform: scale(0.98); }
+  .btn-secondary { background: var(--primary-light); color: var(--primary); }
+  .btn-outline { background: white; color: var(--text-sub); border: 1.5px solid var(--border); }
+
+  .page-header {
+    background: var(--white);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .page-header h2 { font-size: 17px; font-weight: 700; }
+  .back-btn { font-size: 22px; cursor: pointer; color: var(--text-sub); line-height: 1; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .page.active { animation: fadeIn 0.18s ease; }
+
+  .loading-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    gap: 14px;
+  }
+  .spinner {
+    width: 44px; height: 44px;
+    border: 4px solid var(--primary-light);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-overlay p { font-size: 14px; color: var(--text-sub); }
+
+  /* ==================== 登录页 ==================== */
+  #page-login {
+    background: linear-gradient(160deg, #4A7CFF 0%, #7C3AED 100%);
+    justify-content: center;
+    align-items: center;
+    padding: 40px 24px;
+    padding-bottom: 40px;
+  }
+  .login-logo { text-align: center; margin-bottom: 36px; }
+  .login-logo .logo-icon { font-size: 56px; margin-bottom: 12px; }
+  .login-logo h1 { color: white; font-size: 24px; font-weight: 700; }
+  .login-logo p { color: rgba(255,255,255,0.7); font-size: 13px; margin-top: 4px; }
+  .login-card { background: white; border-radius: 24px; padding: 28px 24px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+  .input-group { margin-bottom: 14px; }
+  .input-group label { font-size: 13px; color: var(--text-sub); margin-bottom: 6px; display: block; }
+  .input-row { display: flex; gap: 10px; }
+  .input-field {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+    background: white;
+  }
+  .input-field:focus { border-color: var(--primary); }
+  .btn-code { white-space: nowrap; width: auto; padding: 12px 14px; font-size: 13px; border-radius: 10px; background: var(--primary-light); color: var(--primary); border: none; cursor: pointer; font-weight: 600; }
+  .role-btn { padding: 8px 20px; border-radius: 99px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: white; color: var(--text-sub); transition: all 0.2s; }
+  .role-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+  /* ==================== 学科选择页（首页）==================== */
+  .subjects-header {
+    background: linear-gradient(135deg, #4A7CFF 0%, #7C3AED 100%);
+    padding: 22px 20px 28px;
+    color: white;
+    flex-shrink: 0;
+  }
+  .subjects-header .greeting { font-size: 19px; font-weight: 700; margin-bottom: 3px; }
+  .subjects-header .sub { font-size: 13px; opacity: 0.8; }
+
+  .subjects-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; margin-top: -12px; }
+
+  .section-label { font-size: 13px; font-weight: 700; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; padding: 0 2px; }
+
+  /* 已购科目卡片 */
+  .subject-card {
+    background: white;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: var(--card-shadow);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    border: 1.5px solid transparent;
+  }
+  .subject-card:active { transform: scale(0.98); }
+  .subject-card.math  { border-color: #DBEAFE; }
+  .subject-card.english { border-color: #D1FAE5; }
+
+  .subject-icon {
+    width: 48px; height: 48px;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+  .subject-icon.math { background: #EFF6FF; }
+  .subject-icon.english { background: #ECFDF5; }
+  .subject-icon.locked { background: #F3F4F6; }
+
+  .subject-info { flex: 1; min-width: 0; }
+  .subject-name { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .subject-stats { display: flex; gap: 12px; }
+  .stat-pill {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 12px; color: var(--text-sub);
+  }
+  .stat-pill strong { color: var(--text); font-weight: 700; }
+  .stat-pill.warn strong { color: var(--warning); }
+
+  .subject-arrow { font-size: 18px; color: #CBD5E1; flex-shrink: 0; }
+
+  /* 进度条小型 */
+  .mini-progress { height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; margin-top: 7px; }
+  .mini-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg,#4A7CFF,#7C3AED); }
+  .mini-fill.green { background: linear-gradient(90deg,#22C55E,#16A34A); }
+
+  /* 未购科目 */
+  .subject-card.locked-card {
+    opacity: 0.55;
+    cursor: not-allowed;
+    border-color: var(--border);
+  }
+  .subject-card.locked-card:active { transform: none; }
+  .lock-badge { font-size: 11px; color: white; background: #9CA3AF; padding: 3px 8px; border-radius: 99px; font-weight: 600; }
+  .buy-badge { font-size: 11px; color: white; background: var(--primary); padding: 3px 8px; border-radius: 99px; font-weight: 600; cursor: pointer; }
+
+  /* ==================== 学科内页 ==================== */
+  .subject-page-header {
+    padding: 20px 20px 24px;
+    color: white;
+    flex-shrink: 0;
+  }
+  .subject-page-header.math-bg { background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%); }
+  .subject-page-header.english-bg { background: linear-gradient(135deg, #10B981 0%, #047857 100%); }
+
+  .sph-top { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .sph-back { font-size: 22px; cursor: pointer; opacity: 0.9; }
+  .sph-title { font-size: 18px; font-weight: 700; }
+  .sph-grade { font-size: 12px; opacity: 0.75; margin-left: auto; }
+
+  .quota-row { display: flex; gap: 10px; }
+  .quota-box {
+    flex: 1;
+    background: rgba(255,255,255,0.18);
+    border-radius: 12px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .quota-box .q-num { font-size: 22px; font-weight: 800; }
+  .quota-box .q-label { font-size: 11px; opacity: 0.85; margin-top: 2px; }
+  .quota-box.warn .q-num { color: #FEF08A; }
+
+  .subject-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* 大拍照按钮 */
+  .camera-main {
+    background: linear-gradient(135deg, #4A7CFF 0%, #7C3AED 100%);
+    border-radius: 20px;
+    padding: 28px 20px;
+    color: white;
+    cursor: pointer;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(74,124,255,0.35);
+    transition: transform 0.2s;
+  }
+  .camera-main:active { transform: scale(0.97); }
+  .camera-main .cm-icon { font-size: 44px; margin-bottom: 8px; }
+  .camera-main h3 { font-size: 20px; font-weight: 700; }
+  .camera-main p { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+
+  /* 최근 제목 */
+  .section-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+
+  .recent-list { display: flex; flex-direction: column; gap: 8px; }
+  .recent-item {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: var(--card-shadow);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .recent-item:active { transform: scale(0.98); }
+  .recent-thumb {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .recent-info { flex: 1; min-width: 0; }
+  .recent-info h4 { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recent-info p { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+  .recent-result { font-size: 20px; flex-shrink: 0; }
+
+  /* ==================== 拍照页 ==================== */
+  .camera-area { padding: 16px; }
+  .camera-box {
+    background: var(--white);
+    border-radius: 20px;
+    border: 2px dashed var(--primary);
+    height: 240px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .camera-box:active { background: var(--primary-light); }
+  .camera-box .cam-icon { font-size: 48px; }
+  .camera-box p { font-size: 14px; color: var(--text-sub); }
+  .camera-actions { display: flex; gap: 12px; margin-top: 14px; }
+  .tip-box { margin: 0 16px 16px; background: #F0FDF4; border-radius: 12px; padding: 12px 14px; display: flex; gap: 8px; }
+  .tip-box span { font-size: 13px; color: #166534; line-height: 1.5; }
+  .quota-tip { text-align: center; font-size: 13px; color: var(--text-sub); padding: 6px 0 0; }
+
+  /* ==================== 批改结果页 ==================== */
+  .result-content { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .result-img-box { width: 100%; height: 150px; border-radius: 12px; background: #F1F5F9; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--text-sub); }
+  .result-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 99px; font-size: 14px; font-weight: 700; }
+  .badge-error { background: #FEF2F2; color: var(--error); }
+  .badge-success { background: #F0FDF4; color: var(--success); }
+  .result-detail { font-size: 14px; line-height: 1.8; }
+  .error-block { background: #FEF2F2; padding: 10px 12px; border-radius: 8px; border-left: 3px solid var(--error); font-size: 13px; line-height: 1.7; }
+  .result-actions { display: flex; flex-direction: column; gap: 10px; }
+
+  /* ==================== 解题思路页 ==================== */
+  .thinking-content { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .step-item { display: flex; gap: 12px; }
+  .step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+  .step-body h4 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .step-body p { font-size: 13px; line-height: 1.7; color: #374151; }
+  .encourage-box { background: linear-gradient(135deg,#EEF2FF,#F5F3FF); border-radius: 14px; padding: 16px; text-align: center; }
+  .encourage-box p { font-size: 14px; font-weight: 600; color: #4338CA; }
+
+  /* ==================== 错题集页 ==================== */
+  .mistake-header-bar {
+    background: linear-gradient(135deg, #4A7CFF, #7C3AED);
+    padding: 20px;
+    color: white;
+    display: flex;
+    justify-content: space-around;
+    flex-shrink: 0;
+  }
+  .mh-stat { text-align: center; }
+  .mh-num { font-size: 28px; font-weight: 800; }
+  .mh-label { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+
+  .filter-row { display: flex; gap: 8px; padding: 12px 16px; overflow-x: auto; background: white; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-tab { padding: 6px 14px; border-radius: 99px; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; border: 1.5px solid var(--border); background: white; color: var(--text-sub); transition: all 0.2s; }
+  .filter-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+  .mistake-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .mistake-item { background: white; border-radius: 14px; overflow: hidden; box-shadow: var(--card-shadow); }
+  .mi-head { padding: 11px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+  .mi-subject { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
+  .mi-date { font-size: 12px; color: var(--text-sub); }
+  .mi-body { padding: 10px 14px; font-size: 13px; color: var(--text-sub); line-height: 1.5; }
+  .mi-foot { padding: 9px 14px; display: flex; gap: 8px; border-top: 1px solid var(--border); }
+  .btn-sm { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; flex: 1; }
+  .btn-sm-primary { background: var(--primary); color: white; }
+  .btn-sm-outline { background: var(--primary-light); color: var(--primary); }
+  .done-badge { background: #F0FDF4; color: var(--success); padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+
+  /* ==================== 我的页 ==================== */
+  .profile-top { background: linear-gradient(135deg,#4A7CFF,#7C3AED); padding: 28px 20px 24px; color: white; flex-shrink: 0; }
+  .profile-avatar { width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 10px; }
+  .profile-name { font-size: 19px; font-weight: 700; }
+  .profile-sub { font-size: 13px; opacity: 0.8; margin-top: 3px; }
+  .profile-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .stats-row { display: flex; gap: 10px; }
+  .stats-box { flex: 1; background: white; border-radius: 14px; padding: 14px; text-align: center; box-shadow: var(--card-shadow); }
+  .stats-box .sn { font-size: 22px; font-weight: 800; color: var(--primary); }
+  .stats-box .sl { font-size: 12px; color: var(--text-sub); margin-top: 3px; }
+  .plan-card { }
+  .plan-label { font-size: 13px; color: var(--text-sub); font-weight: 600; margin-bottom: 10px; }
+  .plan-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .plan-row:last-of-type { border-bottom: none; }
+  .plan-name { font-size: 14px; font-weight: 600; }
+  .plan-exp { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+  .plan-exp.warn { color: var(--warning); }
+  .btn-renew { padding: 5px 12px; border-radius: 8px; background: var(--primary-light); color: var(--primary); border: none; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .menu-list { background: white; border-radius: 16px; overflow: hidden; box-shadow: var(--card-shadow); }
+  .menu-item { padding: 14px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .menu-item:last-child { border-bottom: none; }
+  .mi-icon { font-size: 20px; width: 28px; text-align: center; }
+  .mi-text { flex: 1; font-size: 15px; }
+  .mi-arrow { color: var(--text-sub); }
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- 状态栏 -->
+  <div class="status-bar">
+    <span id="clockText">9:41</span>
+    <span>🔋 82%</span>
+  </div>
+
+  <!-- ==================== 登录页 ==================== -->
+  <div class="page active no-tab" id="page-login" style="justify-content:center;align-items:center;padding:36px 24px;background:linear-gradient(160deg,#4A7CFF 0%,#7C3AED 100%);">
+    <div class="login-logo">
+      <div class="logo-icon">🎓</div>
+      <h1>AI学习助手</h1>
+      <p>专注初高中学科辅导</p>
+    </div>
+    <div class="login-card">
+      <div class="input-group">
+        <label>手机号</label>
+        <input class="input-field" type="tel" placeholder="请输入手机号" id="phoneInput">
+      </div>
+      <div class="input-group">
+        <label>验证码</label>
+        <div class="input-row">
+          <input class="input-field" type="text" placeholder="6位验证码">
+          <button class="btn-code" id="sendCodeBtn" onclick="sendCode()">获取验证码</button>
+        </div>
+      </div>
+      <div class="input-group">
+        <label>我是</label>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <button class="role-btn active" id="roleStudent" onclick="selectRole('student')">学生</button>
+          <button class="role-btn" id="roleParent" onclick="selectRole('parent')">家长</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="doLogin()">登录 / 注册</button>
+      <p style="text-align:center;font-size:12px;color:var(--text-sub);margin-top:12px;">登录即表示同意 <a href="#" style="color:var(--primary)">用户协议</a> 和 <a href="#" style="color:var(--primary)">隐私政策</a></p>
+    </div>
+  </div>
+
+  <!-- ==================== 学科选择页（登录后首页）==================== -->
+  <div class="page" id="page-subjects">
+    <div class="subjects-header">
+      <div class="greeting">👋 下午好，小明</div>
+      <div class="sub">初中三年级 · 选择学科开始学习</div>
+    </div>
+    <div class="subjects-body">
+
+      <!-- 已购学科 -->
+      <div class="section-label">已开通学科</div>
+
+      <div class="subject-card math" onclick="enterSubject('math')">
+        <div class="subject-icon math">📐</div>
+        <div class="subject-info">
+          <div class="subject-name">数学</div>
+          <div class="subject-stats">
+            <div class="stat-pill warn">
+              今日 <strong>3/10</strong>
+            </div>
+            <div class="stat-pill">
+              本月 <strong>47题</strong>
+            </div>
+          </div>
+          <div class="mini-progress"><div class="mini-fill" style="width:30%"></div></div>
+        </div>
+        <div class="subject-arrow">›</div>
+      </div>
+
+      <div class="subject-card english" onclick="enterSubject('english')">
+        <div class="subject-icon english">📖</div>
+        <div class="subject-info">
+          <div class="subject-name">英语</div>
+          <div class="subject-stats">
+            <div class="stat-pill">
+              今日 <strong>0/10</strong>
+            </div>
+            <div class="stat-pill">
+              本月 <strong>23题</strong>
+            </div>
+          </div>
+          <div class="mini-progress"><div class="mini-fill green" style="width:0%"></div></div>
+        </div>
+        <div class="subject-arrow">›</div>
+      </div>
+
+      <!-- 未购学科 -->
+      <div class="section-label" style="margin-top:6px;">未开通学科</div>
+
+      <div class="subject-card locked-card">
+        <div class="subject-icon locked">📗</div>
+        <div class="subject-info">
+          <div class="subject-name" style="color:var(--text-sub);">语文</div>
+          <div style="font-size:12px;color:#9CA3AF;margin-top:4px;">开通后即可使用</div>
+        </div>
+        <span class="buy-badge" onclick="alert('即将跳转到购买页面')">开通 ¥15.9/月</span>
+      </div>
+
+      <div class="subject-card locked-card">
+        <div class="subject-icon locked">🔬</div>
+        <div class="subject-info">
+          <div class="subject-name" style="color:var(--text-sub);">物理</div>
+          <div style="font-size:12px;color:#9CA3AF;margin-top:4px;">开通后即可使用</div>
+        </div>
+        <span class="buy-badge" onclick="alert('即将跳转到购买页面')">开通 ¥15.9/月</span>
+      </div>
+
+      <div class="subject-card locked-card">
+        <div class="subject-icon locked">⚗️</div>
+        <div class="subject-info">
+          <div class="subject-name" style="color:var(--text-sub);">化学</div>
+          <div style="font-size:12px;color:#9CA3AF;margin-top:4px;">开通后即可使用</div>
+        </div>
+        <span class="buy-badge" onclick="alert('即将跳转到购买页面')">开通 ¥15.9/月</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== 学科内页（数学为例）==================== -->
+  <div class="page" id="page-subject-detail">
+    <div class="subject-page-header math-bg" id="subjectDetailHeader">
+      <div class="sph-top">
+        <span class="sph-back" onclick="showPage('page-subjects')">←</span>
+        <span class="sph-title" id="subjectDetailTitle">📐 数学</span>
+        <span class="sph-grade">初中三年级</span>
+      </div>
+      <div class="quota-row">
+        <div class="quota-box warn">
+          <div class="q-num" id="sdTodayUsed">3<span style="font-size:14px;font-weight:400;">/10</span></div>
+          <div class="q-label">今日已用</div>
+        </div>
+        <div class="quota-box">
+          <div class="q-num" id="sdMonthTotal">47</div>
+          <div class="q-label">本月总题数</div>
+        </div>
+        <div class="quota-box">
+          <div class="q-num" id="sdMistakes">5</div>
+          <div class="q-label">待复习错题</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subject-body">
+      <!-- 拍照批改主入口 -->
+      <div class="camera-main" onclick="showPage('page-camera')">
+        <div class="cm-icon">📷</div>
+        <h3>拍照批改</h3>
+        <p>拍下作业，AI帮你找出错误</p>
+      </div>
+
+      <!-- 最近题目 -->
+      <div>
+        <div class="section-title">最近题目</div>
+        <div class="recent-list">
+          <div class="recent-item" onclick="showPage('page-result')">
+            <div class="recent-thumb">📄</div>
+            <div class="recent-info">
+              <h4>一元二次方程求解</h4>
+              <p>今天 14:32 · 批改完成</p>
+            </div>
+            <div class="recent-result">❌</div>
+          </div>
+          <div class="recent-item" onclick="showPage('page-result')">
+            <div class="recent-thumb">📄</div>
+            <div class="recent-info">
+              <h4>二次函数图像分析</h4>
+              <p>昨天 20:15 · 批改完成</p>
+            </div>
+            <div class="recent-result">✅</div>
+          </div>
+          <div class="recent-item" onclick="showPage('page-result')">
+            <div class="recent-thumb">📄</div>
+            <div class="recent-info">
+              <h4>不等式组解题</h4>
+              <p>昨天 19:40 · 批改完成</p>
+            </div>
+            <div class="recent-result">❌</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 拍照页 ==================== -->
+  <div class="page no-tab" id="page-camera">
+    <div class="page-header">
+      <span class="back-btn" onclick="showPage('page-subject-detail')">←</span>
+      <h2>拍照批改</h2>
+      <span style="font-size:13px;color:var(--text-sub);margin-left:auto;" id="cameraSubjectLabel">📐 数学</span>
+    </div>
+    <div class="camera-area">
+      <div class="camera-box" onclick="triggerUpload()">
+        <span class="cam-icon">📷</span>
+        <p>点击拍照或上传题目图片</p>
+        <p style="font-size:12px;color:#aaa;">支持 JPG、PNG 格式</p>
+        <img id="previewImg" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:18px;">
+      </div>
+      <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFile(event)">
+      <div class="camera-actions">
+        <button class="btn btn-primary" onclick="triggerUpload()">📷 拍照</button>
+        <button class="btn btn-outline" onclick="triggerUpload()">🖼 相册</button>
+      </div>
+    </div>
+    <div class="tip-box">
+      <span>💡</span>
+      <span>拍摄建议：光线充足、字迹清晰、题目完整在画面内，识别效果更好</span>
+    </div>
+    <div style="padding:0 16px;">
+      <button class="btn btn-primary" id="correctBtn" onclick="doCorrect()" disabled style="opacity:0.5;">开始批改</button>
+    </div>
+    <div class="quota-tip">今日数学剩余次数：<strong style="color:var(--primary);">7次</strong></div>
+  </div>
+
+  <!-- ==================== 批改结果页 ==================== -->
+  <div class="page no-tab" id="page-result">
+    <div class="page-header">
+      <span class="back-btn" onclick="showPage('page-subject-detail')">←</span>
+      <h2>批改结果</h2>
+      <span style="font-size:12px;color:var(--text-sub);margin-left:auto;">📐 数学</span>
+    </div>
+    <div class="result-content">
+      <div class="card" style="padding:12px;">
+        <div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">题目图片</div>
+        <div class="result-img-box">📷 题目图片预览区域</div>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:12px;">
+          <span class="result-badge badge-error">❌ 回答有误</span>
+        </div>
+        <div class="result-detail">
+          <p style="margin-bottom:8px;font-size:14px;">你的解题过程中有一处错误：</p>
+          <div class="error-block">
+            <strong>第2步符号错误：</strong>移项时 +3x 应变为 -3x，但你写成了 +3x。<br>注意等式移项要变号。
+          </div>
+          <p style="margin-top:10px;font-size:13px;color:var(--text-sub);">正确思路是先整理同类项，再移项，最后解方程。</p>
+        </div>
+      </div>
+      <div class="result-actions">
+        <button class="btn btn-primary" onclick="showPage('page-thinking')">💡 获取解题思路</button>
+        <button class="btn btn-secondary" id="addMistakeBtn" onclick="addToMistakes()">📌 加入错题集</button>
+      </div>
+      <div class="quota-tip">今日数学剩余次数：<strong>6次</strong></div>
+    </div>
+  </div>
+
+  <!-- ==================== 解题思路页 ==================== -->
+  <div class="page no-tab" id="page-thinking">
+    <div class="page-header">
+      <span class="back-btn" onclick="showPage('page-result')">←</span>
+      <h2>解题思路</h2>
+    </div>
+    <div class="thinking-content">
+      <div class="card" style="padding:12px;">
+        <div style="font-size:12px;color:var(--text-sub);margin-bottom:4px;">题目</div>
+        <div style="font-size:15px;font-weight:600;">x² - 5x + 6 = 0，求 x 的值</div>
+      </div>
+      <div class="card">
+        <div style="font-size:15px;font-weight:700;margin-bottom:14px;">分步解题引导</div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <h4>观察方程特征</h4>
+              <p>这是标准形式 ax²+bx+c=0，a=1, b=-5, c=6。先想想用因式分解还是求根公式更简便？</p>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <h4>尝试因式分解</h4>
+              <p>找两个数：乘积 = c = 6，相加 = b = -5。哪两个数满足这个条件？</p>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <h4>写出分解形式</h4>
+              <p>得到 (x-?)(x-?)=0 后，用零乘积法则：令每个括号分别等于零，各自求解。</p>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <h4>代入验算</h4>
+              <p>把得到的 x 代回原方程，确认左边 = 右边。养成验算习惯。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="encourage-box">
+        <p>💪 按这个思路自己算一遍，相信你能做对！</p>
+        <p style="font-size:13px;color:#6366F1;margin-top:4px;">理解方法比直接得到答案更重要</p>
+      </div>
+      <button class="btn btn-secondary" onclick="addToMistakes()">📌 加入错题集</button>
+    </div>
+  </div>
+
+  <!-- ==================== 错题集页 ==================== -->
+  <div class="page" id="page-mistakes">
+    <div class="mistake-header-bar">
+      <div class="mh-stat"><div class="mh-num">12</div><div class="mh-label">总错题</div></div>
+      <div class="mh-stat"><div class="mh-num">5</div><div class="mh-label">待复习</div></div>
+      <div class="mh-stat"><div class="mh-num">7</div><div class="mh-label">已掌握</div></div>
+    </div>
+    <div class="filter-row">
+      <button class="filter-tab active">全部</button>
+      <button class="filter-tab">📐 数学</button>
+      <button class="filter-tab">📖 英语</button>
+    </div>
+    <div class="mistake-list">
+      <div class="mistake-item">
+        <div class="mi-head">
+          <div class="mi-subject"><span>📐</span> 数学</div>
+          <div class="mi-date">3天前</div>
+        </div>
+        <div class="mi-body">一元二次方程求解 — 移项时忘记变号，导致最终答案错误</div>
+        <div class="mi-foot">
+          <button class="btn-sm btn-sm-primary" onclick="showPage('page-camera')">重新作答</button>
+          <button class="btn-sm btn-sm-outline" onclick="showPage('page-thinking')">查看思路</button>
+        </div>
+      </div>
+      <div class="mistake-item">
+        <div class="mi-head">
+          <div class="mi-subject"><span>📖</span> 英语</div>
+          <div class="mi-date">今天</div>
+        </div>
+        <div class="mi-body">完形填空第3题 — 混淆 although 和 however 的用法</div>
+        <div class="mi-foot">
+          <button class="btn-sm btn-sm-primary" onclick="showPage('page-camera')">重新作答</button>
+          <button class="btn-sm btn-sm-outline" onclick="showPage('page-thinking')">查看思路</button>
+        </div>
+      </div>
+      <div class="mistake-item" style="opacity:0.65;">
+        <div class="mi-head">
+          <div class="mi-subject"><span>📐</span> 数学</div>
+          <div class="mi-date">5天前</div>
+        </div>
+        <div class="mi-body">二次函数图像 — 顶点坐标计算方法</div>
+        <div class="mi-foot">
+          <span class="done-badge">✅ 已重做掌握</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 我的页 ==================== -->
+  <div class="page" id="page-profile">
+    <div class="profile-top">
+      <div class="profile-avatar">👦</div>
+      <div class="profile-name">小明</div>
+      <div class="profile-sub">初中三年级 · 已开通：数学 英语</div>
+    </div>
+    <div class="profile-body">
+      <div class="stats-row">
+        <div class="stats-box"><div class="sn">47</div><div class="sl">本月批改</div></div>
+        <div class="stats-box"><div class="sn">12</div><div class="sl">错题收集</div></div>
+        <div class="stats-box"><div class="sn" style="color:var(--success)">80%</div><div class="sl">复习完成率</div></div>
+      </div>
+      <div class="card">
+        <div class="plan-label">📦 我的套餐</div>
+        <div class="plan-row">
+          <div>
+            <div class="plan-name">📐 数学</div>
+            <div class="plan-exp warn">⏰ 9天后到期（10月1日）</div>
+          </div>
+          <button class="btn-renew">续费</button>
+        </div>
+        <div class="plan-row">
+          <div>
+            <div class="plan-name">📖 英语</div>
+            <div class="plan-exp">到期：11月21日</div>
+          </div>
+          <button class="btn-renew">续费</button>
+        </div>
+        <button class="btn btn-secondary" style="margin-top:12px;padding:11px;">＋ 添加科目</button>
+      </div>
+      <div class="menu-list">
+        <div class="menu-item"><span class="mi-icon">📊</span><span class="mi-text">学习报告</span><span class="mi-arrow">›</span></div>
+        <div class="menu-item"><span class="mi-icon">⚙️</span><span class="mi-text">账号设置</span><span class="mi-arrow">›</span></div>
+        <div class="menu-item"><span class="mi-icon">📞</span><span class="mi-text">联系客服</span><span class="mi-arrow">›</span></div>
+        <div class="menu-item"><span class="mi-icon">📄</span><span class="mi-text">使用说明</span><span class="mi-arrow">›</span></div>
+        <div class="menu-item" onclick="showPage('page-login')">
+          <span class="mi-icon">🚪</span>
+          <span class="mi-text" style="color:var(--error);">退出登录</span>
+          <span class="mi-arrow">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部导航 -->
+  <div class="tab-bar" id="tabBar" style="display:none;">
+    <div class="tab-item active" id="tab-subjects" onclick="showTab('subjects')">
+      <span class="icon">📚</span>
+      <span>学科</span>
+    </div>
+    <div class="tab-item" id="tab-mistakes" onclick="showTab('mistakes')">
+      <span class="icon">📌</span>
+      <span>错题集</span>
+    </div>
+    <div class="tab-item" id="tab-profile" onclick="showTab('profile')">
+      <span class="icon">👤</span>
+      <span>我的</span>
+    </div>
+  </div>
+
+  <!-- 加载遮罩 -->
+  <div class="loading-overlay" id="loading" style="display:none;">
+    <div class="spinner"></div>
+    <p id="loadingText">加载中...</p>
+  </div>
+
+</div>
+
+<script>
+  const subjectConfig = {
+    math:    { title: '📐 数学', headerClass: 'math-bg', todayUsed: 3, monthTotal: 47, mistakes: 5 },
+    english: { title: '📖 英语', headerClass: 'english-bg', todayUsed: 0, monthTotal: 23, mistakes: 2 }
+  };
+
+  function showPage(pageId) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(pageId).classList.add('active');
+
+    const tabPages = ['page-subjects', 'page-mistakes', 'page-profile'];
+    document.getElementById('tabBar').style.display = tabPages.includes(pageId) ? 'flex' : 'none';
+
+    const tabMap = { 'page-subjects': 'subjects', 'page-mistakes': 'mistakes', 'page-profile': 'profile' };
+    if (tabMap[pageId]) setActiveTab(tabMap[pageId]);
+
+    window.scrollTo(0, 0);
+  }
+
+  function showTab(tab) {
+    const map = { subjects: 'page-subjects', mistakes: 'page-mistakes', profile: 'page-profile' };
+    showPage(map[tab]);
+  }
+
+  function setActiveTab(tab) {
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+    const el = document.getElementById('tab-' + tab);
+    if (el) el.classList.add('active');
+  }
+
+  function enterSubject(subjectKey) {
+    const cfg = subjectConfig[subjectKey];
+    const header = document.getElementById('subjectDetailHeader');
+    // 切换渐变色
+    header.className = 'subject-page-header ' + cfg.headerClass;
+    document.getElementById('subjectDetailTitle').textContent = cfg.title;
+    document.getElementById('sdTodayUsed').innerHTML = cfg.todayUsed + '<span style="font-size:14px;font-weight:400;">/10</span>';
+    document.getElementById('sdMonthTotal').textContent = cfg.monthTotal;
+    document.getElementById('sdMistakes').textContent = cfg.mistakes;
+    document.getElementById('cameraSubjectLabel').textContent = cfg.title;
+    showPage('page-subject-detail');
+  }
+
+  // 登录
+  let codeTimer = null;
+  function sendCode() {
+    const phone = document.getElementById('phoneInput').value;
+    const btn = document.getElementById('sendCodeBtn');
+    if (phone.length < 11) { alert('请输入正确的手机号'); return; }
+    btn.disabled = true;
+    let s = 60;
+    btn.textContent = s + 's';
+    codeTimer = setInterval(() => {
+      s--;
+      btn.textContent = s + 's';
+      if (s <= 0) { clearInterval(codeTimer); btn.disabled = false; btn.textContent = '获取验证码'; }
+    }, 1000);
+  }
+
+  function selectRole(role) {
+    document.getElementById('roleStudent').classList.toggle('active', role === 'student');
+    document.getElementById('roleParent').classList.toggle('active', role === 'parent');
+  }
+
+  function doLogin() {
+    showLoading('登录中...');
+    setTimeout(() => {
+      hideLoading();
+      showPage('page-subjects');
+      document.getElementById('tabBar').style.display = 'flex';
+    }, 1200);
+  }
+
+  // 拍照
+  function triggerUpload() {
+    document.getElementById('fileInput').click();
+  }
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = document.getElementById('previewImg');
+      img.src = ev.target.result;
+      img.style.display = 'block';
+      const btn = document.getElementById('correctBtn');
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    };
+    reader.readAsDataURL(file);
+  }
+  function doCorrect() {
+    showLoading('AI批改中，请稍候...');
+    setTimeout(() => { hideLoading(); showPage('page-result'); }, 2000);
+  }
+
+  // 加入错题集
+  function addToMistakes() {
+    const btn = document.getElementById('addMistakeBtn');
+    if (btn) {
+      btn.textContent = '✅ 已加入错题集';
+      btn.style.background = '#F0FDF4';
+      btn.style.color = 'var(--success)';
+      btn.disabled = true;
+    }
+  }
+
+  // loading
+  function showLoading(text) {
+    document.getElementById('loadingText').textContent = text || '加载中...';
+    document.getElementById('loading').style.display = 'flex';
+  }
+  function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+  }
+
+  // 时钟
+  function updateClock() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2,'0');
+    const m = String(now.getMinutes()).padStart(2,'0');
+    document.getElementById('clockText').textContent = h + ':' + m;
+  }
+  updateClock();
+  setInterval(updateClock, 10000);
+</script>
+</body>
+</html>

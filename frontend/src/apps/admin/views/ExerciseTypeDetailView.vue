@@ -1,0 +1,164 @@
+<template>
+  <div>
+    <div class="page-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <el-button text @click="$router.push('/mgmt/exercise-types')">← 返回</el-button>
+        <h2 v-if="exerciseType">{{ exerciseType.name }}</h2>
+        <el-tag v-if="exerciseType" size="small" type="warning">{{ SUBJECT_NAMES[exerciseType.subject] || exerciseType.subject }}</el-tag>
+        <el-tag v-if="exerciseType" size="small">{{ exerciseType.output_schema }}</el-tag>
+      </div>
+      <el-button type="primary" @click="openCreate">+ 新增版本</el-button>
+    </div>
+
+    <el-card v-loading="loading">
+      <el-table :data="versions" stripe>
+        <el-table-column label="激活" width="70">
+          <template #default="{ row }">
+            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+              {{ row.is_active ? '激活' : '未激活' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="版本名称" min-width="160" prop="version_name" />
+        <el-table-column label="创建时间" width="180">
+          <template #default="{ row }">
+            {{ formatTime(row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button text size="small" type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button text size="small" type="success" v-if="!row.is_active" @click="activate(row)">激活</el-button>
+            <el-button text size="small" type="danger" @click="remove(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <!-- 新增/编辑弹窗 -->
+    <el-dialog v-model="dialog" :title="editingId ? '编辑版本' : '新增版本'" width="700px">
+      <el-form :model="form" label-width="100px">
+        <el-form-item label="版本名称">
+          <el-input v-model="form.version_name" placeholder="如：v1 初版、v2 更详细" />
+        </el-form-item>
+        <el-form-item label="Prompt">
+          <el-input
+            v-model="form.prompt_template"
+            type="textarea"
+            :rows="20"
+            placeholder="Prompt 模板，可使用 {grade} {subject} 变量"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialog = false">取消</el-button>
+        <el-button type="primary" @click="save" :loading="saving">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { adminApi } from '@/api/index'
+import { ElMessage, ElMessageBox } from 'element-plus'
+
+const SUBJECT_NAMES = { math:'数学', chinese:'语文', english:'英语', physics:'物理', chemistry:'化学', biology:'生物' }
+
+const route = useRoute()
+const typeId = route.params.typeId
+
+const loading = ref(false)
+const saving = ref(false)
+const exerciseType = ref(null)
+const versions = ref([])
+const dialog = ref(false)
+const editingId = ref(null)
+const form = ref({ version_name: '', prompt_template: '' })
+
+function formatTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  // Assume UTC stored, convert to Beijing time
+  const bj = new Date(d.getTime() + 8 * 3600 * 1000)
+  return bj.toISOString().replace('T', ' ').slice(0, 16)
+}
+
+async function load() {
+  loading.value = true
+  try {
+    const res = await adminApi.getPromptVersions(typeId)
+    exerciseType.value = res.exercise_type
+    versions.value = res.prompts
+  } catch {
+    ElMessage.error('加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function openCreate() {
+  editingId.value = null
+  form.value = { version_name: '', prompt_template: '' }
+  dialog.value = true
+}
+
+function openEdit(row) {
+  editingId.value = row.id
+  form.value = { version_name: row.version_name, prompt_template: row.prompt_template }
+  dialog.value = true
+}
+
+async function save() {
+  if (!form.value.version_name) return ElMessage.warning('请填写版本名称')
+  if (!form.value.prompt_template) return ElMessage.warning('请填写 Prompt')
+  saving.value = true
+  try {
+    if (editingId.value) {
+      await adminApi.updatePromptVersion(typeId, editingId.value, form.value)
+      ElMessage.success('已更新')
+    } else {
+      await adminApi.createPromptVersion(typeId, form.value)
+      ElMessage.success('已创建')
+    }
+    dialog.value = false
+    load()
+  } catch (e) {
+    ElMessage.error(e?.detail || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function activate(row) {
+  try {
+    await adminApi.activatePromptVersion(typeId, row.id)
+    ElMessage.success(`已激活「${row.version_name}」`)
+    load()
+  } catch (e) {
+    ElMessage.error(e?.detail || '激活失败')
+  }
+}
+
+async function remove(row) {
+  if (row.is_active) {
+    return ElMessage.warning('请先切换到其他版本，再删除此版本')
+  }
+  await ElMessageBox.confirm(`确认删除版本「${row.version_name}」？`, '确认删除', { type: 'warning' })
+  try {
+    await adminApi.deletePromptVersion(typeId, row.id)
+    ElMessage.success('已删除')
+    load()
+  } catch (e) {
+    ElMessage.error(e?.detail || '删除失败')
+  }
+}
+
+onMounted(load)
+</script>
+
+<style scoped>
+.page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+.page-header h2 { margin:0; font-size:20px; }
+</style>
