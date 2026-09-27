@@ -64,4 +64,9 @@ export const adminApi = {
   updatePromptVersion: (typeId, promptId, data) => adminHttp.patch(`/admin/exercise-types/${typeId}/prompts/${promptId}`, data),
   activatePromptVersion: (typeId, promptId) => adminHttp.post(`/admin/exercise-types/${typeId}/prompts/${promptId}/activate`),
   deletePromptVersion: (typeId, promptId) => adminHttp.delete(`/admin/exercise-types/${typeId}/prompts/${promptId}`),
+
+  // 通用 Prompt 模版
+  getGeneralPrompts: () => adminHttp.get('/admin/general-prompts'),
+  createGeneralPrompt: (data) => adminHttp.post('/admin/general-prompts', data),
+  updateGeneralPrompt: (id, data) => adminHttp.patch(`/admin/general-prompts/${id}`, data),
 }

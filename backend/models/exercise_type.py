@@ -14,9 +14,12 @@ class ExerciseType(Base):
     name = Column(String(50), nullable=False)       # 如"英语翻译题"
     prompt_template = Column(Text, nullable=False)  # 含 {grade} {subject} 占位符
     # output_schema 描述期望的 JSON 结构，供前端渲染判断
-    # "items"  → 数组，每条含 number/original/student_answer/is_correct/feedback/corrected
-    # "simple" → 旧版 {is_correct, feedback, hint}
-    output_schema = Column(String(20), default="simple")
+    # "translation" → 数组，每条含 number/original/student_answer/is_correct/feedback/corrected
+    # "essay"       → 作文批改 {score, overall, sentences, ...}
+    # "grammar"     → 语法填空 {total_score, full_score, blanks, ...}
+    # "math"        → 数学解答题 {is_correct, feedback, hint}
+    # "summary"     → 概要写作 {is_correct, feedback, ...}
+    output_schema = Column(String(20), default="math")
     is_active = Column(Boolean, default=True)
     sort_order = Column(String(5), default="0")    # 排序
     created_at = Column(DateTime, default=datetime.utcnow)

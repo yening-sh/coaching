@@ -23,7 +23,7 @@
             <el-tag size="small" type="warning">{{ row.provider }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="model_id" label="模型 ID" min-width="160" />
+        <el-table-column prop="model_id" label="模型 ID" min-width="80" />
         <el-table-column label="Key" width="110">
           <template #default="{ row }">
             <span style="font-size:12px;color:#9CA3AF">{{ row.api_key_hint }}</span>
@@ -36,14 +36,16 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="note" label="备注" min-width="100" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column prop="note" label="备注" min-width="80" />
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button text size="small" @click="test(row)" :loading="testingId === row.id">测试</el-button>
-            <el-button v-if="!row.is_active" text type="primary" size="small" @click="activate(row)">激活</el-button>
-            <el-button v-else text disabled size="small">已激活</el-button>
-            <el-button text type="danger" size="small" :disabled="row.is_active" @click="remove(row)">删除</el-button>
+            <div class="action-btns">
+              <el-button size="small" type="success" @click="openEdit(row)">编辑</el-button>
+              <el-button size="small" type="warning" @click="test(row)" :loading="testingId === row.id">测试</el-button>
+              <el-button v-if="!row.is_active" size="small" type="primary" @click="activate(row)">激活</el-button>
+              <el-button v-else size="small" disabled>已激活</el-button>
+              <el-button size="small" type="danger" :disabled="row.is_active" @click="remove(row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -151,7 +153,7 @@ async function save() {
   try {
     if (editingId.value) {
       const payload = { ...form.value }
-      if (!payload.api_key) delete payload.api_key  // 留空不修改
+      if (!payload.api_key) delete payload.api_key
       await adminApi.updateLLMConfig(editingId.value, payload)
     } else {
       const config = await adminApi.createLLMConfig(form.value)
@@ -215,4 +217,6 @@ onMounted(loadConfigs)
 <style scoped>
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
 .page-header h2 { margin:0; font-size:20px; }
+.action-btns { display:flex; gap:6px; align-items:center; }
+.action-btns .el-button { width:64px; margin:0; }
 </style>

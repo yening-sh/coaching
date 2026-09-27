@@ -17,6 +17,9 @@ class Record(Base):
     is_correct = Column(Boolean)                       # 批改结论
     ai_feedback = Column(Text)                         # AI 批改内容（JSON）
     ai_thinking = Column(Text)                         # AI 解题思路（懒加载）
+    ocr_text = Column(Text)                            # LLM 识别到的图片文字（供后续双模型改造用）
+    status = Column(String(20), default="done")        # pending|done|error
+    error_message = Column(Text)                       # 出错时的错误信息
     token_input = Column(Integer, default=0)
     token_output = Column(Integer, default=0)
     llm_provider = Column(String(50))                  # 记录当时用的哪个LLM

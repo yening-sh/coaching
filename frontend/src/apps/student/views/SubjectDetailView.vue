@@ -29,6 +29,7 @@
         <div class="record-body">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span style="font-size:11px;color:#9CA3AF">{{ fmtTime(r.created_at) }}</span>
+            <span v-if="r.exercise_type_name" style="font-size:11px;color:#3B82F6;background:#EFF6FF;border-radius:4px;padding:1px 6px;font-weight:500">{{ r.exercise_type_name }}</span>
             <span v-if="r.llm_model" style="font-size:10px;color:#C4B5FD;background:#F5F3FF;border-radius:4px;padding:1px 5px">{{ r.llm_model }}</span>
           </div>
           <div class="record-preview">点击查看批改详情</div>

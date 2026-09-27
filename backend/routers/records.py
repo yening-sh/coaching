@@ -54,27 +54,39 @@ async def submit(
         url = await storage.upload_image(f)
         image_urls.append(url)
 
-    # 调用 AI 批改（多图）
-    ai_result = ai_client.correct_homework(
-        db, image_urls, subject, sub.grade_level, exercise_type=exercise_type
-    )
-
-    # 保存记录，image_url 存 JSON 数组
+    # 先保存 pending 记录，拿到 record_id（方便用户报错时定位）
     record = Record(
         student_id=current_user.id,
         subject=subject,
         exercise_type_id=exercise_type_id,
         image_url=json.dumps(image_urls, ensure_ascii=False),
-        is_correct=ai_result["is_correct"],
-        ai_feedback=json.dumps(ai_result["result"], ensure_ascii=False),
-        token_input=ai_result["token_input"],
-        token_output=ai_result["token_output"],
-        llm_provider=ai_result["llm_provider"],
-        llm_model=ai_result["llm_model"],
+        status="pending",
     )
     db.add(record)
     db.commit()
     db.refresh(record)
+
+    # 调用 AI 批改（多图）
+    try:
+        ai_result = ai_client.correct_homework(
+            db, image_urls, subject, sub.grade_level, exercise_type=exercise_type
+        )
+    except Exception as e:
+        record.status = "error"
+        record.error_message = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail={"record_id": record.id, "message": str(e)})
+
+    # 更新记录为完成状态
+    record.is_correct = ai_result["is_correct"]
+    record.ai_feedback = json.dumps(ai_result["result"], ensure_ascii=False)
+    record.ocr_text = ai_result.get("ocr_text", "")
+    record.token_input = ai_result["token_input"]
+    record.token_output = ai_result["token_output"]
+    record.llm_provider = ai_result["llm_provider"]
+    record.llm_model = ai_result["llm_model"]
+    record.status = "done"
+    db.commit()
 
     return {
         "id": record.id,
@@ -84,6 +96,7 @@ async def submit(
         "subject": record.subject,
         "image_urls": image_urls,
         "image_url": json.dumps(image_urls, ensure_ascii=False),
+        "ocr_text": record.ocr_text or "",
     }
 
 
@@ -135,17 +148,23 @@ def get_recent(
     records = query.order_by(Record.created_at.desc()).limit(limit).all()
 
     from datetime import timedelta
-    return [
-        {
+    from models.exercise_type import ExerciseType
+    result = []
+    for r in records:
+        type_name = ""
+        if r.exercise_type_id:
+            et = db.query(ExerciseType).filter(ExerciseType.id == r.exercise_type_id).first()
+            type_name = et.name if et else ""
+        result.append({
             "id": r.id,
             "subject": r.subject,
             "is_correct": r.is_correct,
             "image_url": r.image_url,
             "llm_model": r.llm_model or "",
+            "exercise_type_name": type_name,
             "created_at": (r.created_at + timedelta(hours=8)).isoformat() if r.created_at else "",
-        }
-        for r in records
-    ]
+        })
+    return result
 
 
 @router.get("/{record_id}")
@@ -165,9 +184,9 @@ def get_record(
     # 从题型配置中读取 output_schema，避免 essay/simple 误判
     if record.exercise_type_id:
         et = db.query(ExerciseType).filter(ExerciseType.id == record.exercise_type_id).first()
-        output_schema = et.output_schema if et else ("items" if isinstance(result, list) else "simple")
+        output_schema = et.output_schema if et else ("translation" if isinstance(result, list) else "math")
     else:
-        output_schema = "items" if isinstance(result, list) else "simple"
+        output_schema = "translation" if isinstance(result, list) else "math"
 
     return {
         "id": record.id,
@@ -176,6 +195,7 @@ def get_record(
         "result": result,
         "subject": record.subject,
         "image_url": record.image_url,
+        "ocr_text": record.ocr_text or "",
     }
 
 

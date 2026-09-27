@@ -39,6 +39,7 @@ const router = createRouter({
         { path: 'llm', component: () => import('@/apps/admin/views/LLMView.vue') },
         { path: 'exercise-types', component: () => import('@/apps/admin/views/ExerciseTypesView.vue') },
         { path: 'exercise-types/:typeId', component: () => import('@/apps/admin/views/ExerciseTypeDetailView.vue') },
+        { path: 'general-prompts', component: () => import('@/apps/admin/views/GeneralPromptsView.vue') },
       ]
     },
 

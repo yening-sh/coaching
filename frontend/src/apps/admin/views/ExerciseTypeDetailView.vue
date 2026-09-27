@@ -19,17 +19,20 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="版本名称" min-width="160" prop="version_name" />
-        <el-table-column label="创建时间" width="180">
+        <el-table-column label="版本名称" width="160" prop="version_name" />
+        <el-table-column label="创建时间" min-width="180">
           <template #default="{ row }">
             {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" min-width="200" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button text size="small" type="success" v-if="!row.is_active" @click="activate(row)">激活</el-button>
-            <el-button text size="small" type="danger" @click="remove(row)">删除</el-button>
+            <div class="action-btns">
+              <el-button size="small" type="success" @click="openEdit(row)">编辑</el-button>
+              <el-button size="small" type="primary" v-if="!row.is_active" @click="activate(row)">激活</el-button>
+              <el-button size="small" disabled v-else>已激活</el-button>
+              <el-button size="small" type="danger" :disabled="row.is_active" @click="remove(row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -161,4 +164,6 @@ onMounted(load)
 <style scoped>
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
 .page-header h2 { margin:0; font-size:20px; }
+.action-btns { display:flex; gap:6px; align-items:center; }
+.action-btns .el-button { width:64px; margin:0; }
 </style>

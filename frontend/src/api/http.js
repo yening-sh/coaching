@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const http = axios.create({
   baseURL: '/api',
-  timeout: 60000,  // AI 调用可能慢，60s
+  timeout: 180000,  // AI 调用可能慢，最长 3 分钟
 })
 
 // 请求拦截：自动加 Token

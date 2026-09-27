@@ -16,6 +16,7 @@ from models.record import Record
 from models.llm_config import LLMConfig
 from models.exercise_type import ExerciseType
 from models.exercise_type_prompt import ExerciseTypePrompt
+from models.general_prompt import GeneralPrompt
 from core.security import require_admin, hash_password
 
 router = APIRouter(prefix="/admin", tags=["后台管理"])
@@ -185,6 +186,9 @@ def user_records(
 
     # 预加载所有 LLM 配置，按 model_id 索引
     all_configs = {c.model_id: c for c in db.query(LLMConfig).all()}
+    # 预加载所有题型，按 id 索引
+    from models.exercise_type import ExerciseType
+    all_types = {et.id: et.name for et in db.query(ExerciseType).all()}
 
     SUBJECT_NAMES = {"math": "数学", "chinese": "语文", "english": "英语",
                      "physics": "物理", "chemistry": "化学", "biology": "生物"}
@@ -201,6 +205,7 @@ def user_records(
         items.append({
             "id": r.id,
             "subject": SUBJECT_NAMES.get(r.subject, r.subject),
+            "exercise_type": all_types.get(r.exercise_type_id, "-") if r.exercise_type_id else "-",
             "token_input": tok_in,
             "token_output": tok_out,
             "cost_cny": cost["cny"],
@@ -556,7 +561,7 @@ class ExerciseTypeRequest(BaseModel):
     subject: str
     name: str
     prompt_template: str
-    output_schema: str = "simple"
+    output_schema: str = "math"
     sort_order: str = "0"
 
 
@@ -753,4 +758,83 @@ def delete_prompt_version(
     db.delete(p)
     db.commit()
     return {"message": "已删除"}
+
+
+# ==================== 通用 Prompt 模版 ====================
+
+class GeneralPromptCreate(BaseModel):
+    subject: str
+    grade_level: str
+    prompt_template: str
+
+
+class GeneralPromptUpdate(BaseModel):
+    prompt_template: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+SUBJECT_NAMES = {"english": "英语", "math": "数学", "chinese": "语文",
+                 "physics": "物理", "chemistry": "化学", "biology": "生物"}
+GRADE_NAMES = {"senior": "高中", "junior": "初中", "all": "全部"}
+
+
+@router.get("/general-prompts")
+def list_general_prompts(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    items = db.query(GeneralPrompt).order_by(GeneralPrompt.created_at).all()
+    result = []
+    for g in items:
+        result.append({
+            "id": g.id,
+            "subject": g.subject,
+            "subject_label": SUBJECT_NAMES.get(g.subject, g.subject),
+            "grade_level": g.grade_level,
+            "grade_label": GRADE_NAMES.get(g.grade_level, g.grade_level),
+            "prompt_template": g.prompt_template,
+            "is_active": g.is_active,
+            "created_at": g.created_at.isoformat() if g.created_at else None,
+        })
+    return result
+
+
+@router.post("/general-prompts")
+def create_general_prompt(
+    req: GeneralPromptCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    existing = db.query(GeneralPrompt).filter(
+        GeneralPrompt.subject == req.subject,
+        GeneralPrompt.grade_level == req.grade_level,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="该科目/年级组合已存在通用模版")
+    g = GeneralPrompt(
+        subject=req.subject,
+        grade_level=req.grade_level,
+        prompt_template=req.prompt_template,
+    )
+    db.add(g)
+    db.commit()
+    return {"id": g.id, "message": "已创建"}
+
+
+@router.patch("/general-prompts/{prompt_id}")
+def update_general_prompt(
+    prompt_id: str,
+    req: GeneralPromptUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    g = db.query(GeneralPrompt).filter(GeneralPrompt.id == prompt_id).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="通用模版不存在")
+    if req.prompt_template is not None:
+        g.prompt_template = req.prompt_template
+    if req.is_active is not None:
+        g.is_active = req.is_active
+    db.commit()
+    return {"message": "已更新"}
 

@@ -8,6 +8,7 @@
         <el-menu-item index="/mgmt/users"><el-icon><User /></el-icon>账号管理</el-menu-item>
         <el-menu-item index="/mgmt/llm"><el-icon><Setting /></el-icon>AI模型配置</el-menu-item>
         <el-menu-item index="/mgmt/exercise-types"><el-icon><EditPen /></el-icon>题型管理</el-menu-item>
+        <el-menu-item index="/mgmt/general-prompts"><el-icon><Document /></el-icon>通用模版</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -25,7 +26,7 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { useAdminAuthStore } from '@/stores/adminAuth'
-import { EditPen } from '@element-plus/icons-vue'
+import { EditPen, Document } from '@element-plus/icons-vue'
 
 const auth = useAdminAuthStore()
 const router = useRouter()

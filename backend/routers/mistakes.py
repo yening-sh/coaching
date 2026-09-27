@@ -40,7 +40,7 @@ def add_mistake(
         note = " | ".join(item.get("feedback", "") for item in parsed if not item.get("is_correct", True))
     else:
         note = parsed.get("feedback", "")
-    output_schema = "items" if isinstance(parsed, list) else "simple"
+    output_schema = "translation" if isinstance(parsed, list) else "math"
     mistake = Mistake(
         student_id=current_user.id,
         record_id=record.id,

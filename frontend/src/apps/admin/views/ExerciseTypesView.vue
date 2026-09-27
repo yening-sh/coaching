@@ -33,18 +33,15 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <div style="display:flex;align-items:center;gap:4px;white-space:nowrap">
-              <el-button text size="small" type="primary"
+            <div class="action-btns">
+              <el-button size="small" type="primary"
                 @click="$router.push(`/mgmt/exercise-types/${row.id}`)">Prompt 版本</el-button>
-              <el-divider direction="vertical" />
-              <el-button text size="small" :type="row.is_active ? 'warning' : 'success'"
+              <el-button size="small" :type="row.is_active ? 'warning' : 'success'"
                 @click="toggleActive(row)">
                 {{ row.is_active ? '停用' : '启用' }}
               </el-button>
-              <el-divider direction="vertical" />
-              <el-button text type="danger" size="small" @click="remove(row)">删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -64,9 +61,11 @@
         </el-form-item>
         <el-form-item label="输出格式">
           <el-select v-model="form.output_schema" style="width:160px">
-            <el-option value="simple" label="simple（通用）" />
-            <el-option value="items" label="items（逐题数组）" />
+            <el-option value="math" label="math（数学解答题）" />
+            <el-option value="translation" label="translation（英语翻译）" />
             <el-option value="essay" label="essay（作文）" />
+            <el-option value="summary" label="summary（概要写作）" />
+            <el-option value="grammar" label="grammar（语法填空）" />
           </el-select>
         </el-form-item>
         <el-form-item label="排序">
@@ -104,7 +103,7 @@ async function loadTypes() {
 }
 
 function openCreate() {
-  form.value = { subject: 'english', name: '', output_schema: 'simple', sort_order: '0' }
+  form.value = { subject: 'english', name: '', output_schema: 'math', sort_order: '0' }
   dialog.value = true
 }
 
@@ -143,4 +142,6 @@ onMounted(loadTypes)
 <style scoped>
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
 .page-header h2 { margin:0; font-size:20px; }
+.action-btns { display:flex; gap:6px; align-items:center; }
+.action-btns .el-button { margin:0; }
 </style>

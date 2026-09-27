@@ -36,14 +36,16 @@
             <span v-if="!row.subscriptions?.length" style="color:#ccc">无</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button text size="small" @click="toggleActive(row)">
-              {{ row.is_active ? '停用' : '启用' }}
-            </el-button>
-            <el-button text size="small" type="primary" @click="openSubscription(row)">订阅</el-button>
-            <el-button text size="small" type="success" @click="openUsage(row)">用量</el-button>
+            <div class="action-btns">
+              <el-button size="small" type="success" @click="openEdit(row)">编辑</el-button>
+              <el-button size="small" :type="row.is_active ? 'warning' : 'primary'" @click="toggleActive(row)">
+                {{ row.is_active ? '停用' : '启用' }}
+              </el-button>
+              <el-button size="small" type="primary" @click="openSubscription(row)">订阅</el-button>
+              <el-button size="small" @click="openUsage(row)">用量</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -127,6 +129,7 @@
       <el-table :data="usageRecords" v-loading="usageLoading" stripe size="small">
         <el-table-column prop="created_at" label="时间" width="140" />
         <el-table-column prop="subject" label="学科" width="70" />
+        <el-table-column prop="exercise_type" label="题型" width="90" />
         <el-table-column prop="model" label="模型" min-width="120" show-overflow-tooltip />
         <el-table-column label="输入 Token" align="right" width="100">
           <template #default="{ row }">{{ fmtNum(row.token_input) }}</template>
@@ -303,4 +306,6 @@ onMounted(loadUsers)
 <style scoped>
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
 .page-header h2 { margin:0; font-size:20px; }
+.action-btns { display:flex; gap:6px; align-items:center; }
+.action-btns .el-button { width:64px; margin:0; }
 </style>

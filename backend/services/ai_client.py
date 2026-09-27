@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from models.llm_config import LLMConfig
+from models.general_prompt import GeneralPrompt
 
 SUBJECT_NAMES = {
     "math": "数学", "chinese": "语文", "english": "英语",
@@ -165,7 +166,7 @@ def correct_homework(db: Session, image_urls: list[str], subject: str, grade_lev
             ExerciseTypePrompt.is_active == True,
         ).first()
         prompt_tpl = active_prompt.prompt_template if active_prompt else exercise_type.prompt_template
-        prompt = prompt_tpl.format(grade=grade, subject=subj)
+        prompt = prompt_tpl.replace("{grade}", grade).replace("{subject}", subj)
         output_schema = exercise_type.output_schema
     else:
         prompt = CORRECT_PROMPT.format(grade=grade, subject=subj)
@@ -174,41 +175,98 @@ def correct_homework(db: Session, image_urls: list[str], subject: str, grade_lev
     if len(image_urls) > 1:
         prompt = f"以下共 {len(image_urls)} 张图片，请自行判断哪些是题目、哪些是学生的手写作答，然后进行批改。\n\n" + prompt
 
-    if output_schema == "items":
-        max_tok = 16000
-    elif output_schema == "essay":
-        max_tok = 16000
+    # 追加通用 prompt 模版（按 subject + grade_level 匹配）
+    general = db.query(GeneralPrompt).filter(
+        GeneralPrompt.subject == subject,
+        GeneralPrompt.grade_level == grade_level,
+        GeneralPrompt.is_active == True,
+    ).first()
+
+    if output_schema == "summary":
+        # summary 的词汇积累和识别文本已内置于 prompt，general prompt 只追加红色文字规则
+        if general:
+            prompt += "\n\n【通用补充规则】红色文字识别：如果图片中同时存在黑色/蓝色文字和红色文字，红色是老师或学生的批改标注，请忽略红色内容，只批改黑色/蓝色的学生原始作答。"
     else:
-        max_tok = 16000
-    raw, tok_in, tok_out = call_llm(config, prompt, image_urls, max_tokens=max_tok)
+        if general:
+            prompt += "\n\n" + general.prompt_template
+
+    # 追加 ocr_text 要求（供后续双模型改造用）
+    if output_schema == "translation":
+        prompt += "\n\n另外，请将返回格式改为：{\"items\": [...原数组内容...], \"ocr_text\": \"图片中识别到的全部文字\"}"
+    elif output_schema != "summary":
+        # summary 的识别文本已内置于 prompt
+        prompt += "\n\n另外，请在返回的 JSON 中额外加入一个字段 \"ocr_text\"，值为你从图片中识别到的全部文字（原文照录，不作修改）。"
+
+    raw, tok_in, tok_out = call_llm(config, prompt, image_urls, max_tokens=16000)
     print(f"[ai_client] output_schema={output_schema}, images={len(image_urls)}, raw[:200]={raw[:200]!r}")
 
-    if output_schema == "items":
-        # 期望返回 JSON 数组
-        match = re.search(r'\[.*\]', raw, re.DOTALL)
-        if match:
+    if output_schema == "translation":
+        # 期望返回包含 items 数组和 ocr_text 的对象，或直接返回数组（兼容旧格式）
+        ocr_text = ""
+        # 先尝试解析外层对象
+        obj_match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if obj_match:
             try:
-                result = json.loads(match.group())
+                outer = json.loads(obj_match.group())
+                if "items" in outer:
+                    result = outer["items"]
+                    ocr_text = outer.get("ocr_text", "")
+                else:
+                    result = []
             except json.JSONDecodeError:
                 result = []
         else:
-            result = []
+            # fallback：直接匹配数组
+            arr_match = re.search(r'\[.*\]', raw, re.DOTALL)
+            if arr_match:
+                try:
+                    result = json.loads(arr_match.group())
+                except json.JSONDecodeError:
+                    result = []
+            else:
+                result = []
         # 整体 is_correct：所有题都对才算全对
         all_correct = all(item.get("is_correct", False) for item in result) if result else False
-        print(f"[ai_client] parsed items count={len(result)}, all_correct={all_correct}")
+        print(f"[ai_client] parsed translation count={len(result)}, all_correct={all_correct}")
     elif output_schema == "essay":
         match = re.search(r'\{.*\}', raw, re.DOTALL)
         result = json.loads(match.group()) if match else {"score": 0, "overall": raw, "sentences": [], "revised": "", "suggestions": "", "model_essay": ""}
         all_correct = result.get("score", 0) >= 18
+        ocr_text = result.get("ocr_text", "") if isinstance(result, dict) else ""
+    elif output_schema == "grammar":
+        # 期望返回 JSON 对象，含 total_score/full_score/blanks 等
+        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if match:
+            try:
+                result = json.loads(match.group())
+            except json.JSONDecodeError:
+                result = {"total_score": 0, "full_score": 15, "overall_comment": raw, "blanks": []}
+        else:
+            result = {"total_score": 0, "full_score": 15, "overall_comment": raw, "blanks": []}
+        all_correct = result.get("total_score", 0) >= result.get("full_score", 15)
+        ocr_text = result.get("ocr_text", "") if isinstance(result, dict) else ""
+    elif output_schema == "summary":
+        # 返回 Markdown，从末尾「## 识别文本」节提取 ocr_text，其余作为 feedback
+        ocr_match = re.search(r'##\s*识别文本\s*\n(.*)', raw, re.DOTALL)
+        if ocr_match:
+            ocr_text = ocr_match.group(1).strip()
+            result = {"feedback": raw[:ocr_match.start()].rstrip()}
+        else:
+            ocr_text = ""
+            result = {"feedback": raw}
+        all_correct = True
     else:
+        # math / 其他：返回 JSON 对象
         match = re.search(r'\{.*\}', raw, re.DOTALL)
         result = json.loads(match.group()) if match else {"is_correct": False, "feedback": raw, "hint": ""}
         all_correct = result.get("is_correct", False)
+        ocr_text = result.get("ocr_text", "") if isinstance(result, dict) else ""
 
     return {
         "result": result,
         "output_schema": output_schema,
         "is_correct": all_correct,
+        "ocr_text": ocr_text,
         "token_input": tok_in,
         "token_output": tok_out,
         "llm_provider": config.provider,
