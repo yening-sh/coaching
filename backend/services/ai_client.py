@@ -233,17 +233,18 @@ def correct_homework(db: Session, image_urls: list[str], subject: str, grade_lev
         result = json.loads(match.group()) if match else {"score": 0, "overall": raw, "sentences": [], "revised": "", "suggestions": "", "model_essay": ""}
         all_correct = result.get("score", 0) >= 18
         ocr_text = result.get("ocr_text", "") if isinstance(result, dict) else ""
-    elif output_schema == "grammar":
+    elif output_schema in ("grammar", "cloze"):
         # 期望返回 JSON 对象，含 total_score/full_score/blanks 等
+        full_score_default = 15 if output_schema == "grammar" else 10
         match = re.search(r'\{.*\}', raw, re.DOTALL)
         if match:
             try:
                 result = json.loads(match.group())
             except json.JSONDecodeError:
-                result = {"total_score": 0, "full_score": 15, "overall_comment": raw, "blanks": []}
+                result = {"total_score": 0, "full_score": full_score_default, "overall_comment": raw, "blanks": []}
         else:
-            result = {"total_score": 0, "full_score": 15, "overall_comment": raw, "blanks": []}
-        all_correct = result.get("total_score", 0) >= result.get("full_score", 15)
+            result = {"total_score": 0, "full_score": full_score_default, "overall_comment": raw, "blanks": []}
+        all_correct = result.get("total_score", 0) >= result.get("full_score", full_score_default)
         ocr_text = result.get("ocr_text", "") if isinstance(result, dict) else ""
     elif output_schema == "summary":
         # 返回 Markdown，从末尾「## 识别文本」节提取 ocr_text，其余作为 feedback
