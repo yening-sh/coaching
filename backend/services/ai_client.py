@@ -190,12 +190,12 @@ def correct_homework(db: Session, image_urls: list[str], subject: str, grade_lev
         if general:
             prompt += "\n\n" + general.prompt_template
 
-    # 追加 ocr_text 要求（供后续双模型改造用）
+    # 追加 ocr_text + vocabulary 要求（供后续双模型改造用）
     if output_schema == "translation":
         prompt += "\n\n另外，请将返回格式改为：{\"items\": [...原数组内容...], \"ocr_text\": \"图片中识别到的全部文字\"}"
     elif output_schema != "summary":
         # summary 的识别文本已内置于 prompt
-        prompt += "\n\n另外，请在返回的 JSON 中额外加入一个字段 \"ocr_text\"，值为你从图片中识别到的全部文字（原文照录，不作修改）。"
+        prompt += "\n\n另外，请在返回的 JSON 中额外加入以下两个字段：\n1. \"ocr_text\"：你从图片中识别到的全部文字（原文照录，不作修改）。\n2. \"vocabulary\"：题目印刷文字（非学生作答）中出现的高中及以上水平英语词汇，数组格式，每项包含 \"word\"（词汇原形）、\"meaning\"（语境含义，中文）、\"note\"（语法/用法知识点，无则为空字符串）。如无高中及以上词汇则为空数组。"
 
     raw, tok_in, tok_out = call_llm(config, prompt, image_urls, max_tokens=16000)
     print(f"[ai_client] output_schema={output_schema}, images={len(image_urls)}, raw[:200]={raw[:200]!r}")
