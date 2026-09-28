@@ -19,7 +19,7 @@ export const recordApi = {
   getThinking: (recordId) => http.post(`/records/${recordId}/thinking`),
   get: (recordId) => http.get(`/records/${recordId}`),
   delete: (recordId) => http.delete(`/records/${recordId}`),
-  recent: (subject, limit = 10) => http.get('/records/recent', { params: { subject, limit } }),
+  recent: (subject, limit = 100) => http.get('/records/recent', { params: { subject, limit } }),
 }
 
 export const mistakeApi = {
@@ -69,4 +69,10 @@ export const adminApi = {
   getGeneralPrompts: () => adminHttp.get('/admin/general-prompts'),
   createGeneralPrompt: (data) => adminHttp.post('/admin/general-prompts', data),
   updateGeneralPrompt: (id, data) => adminHttp.patch(`/admin/general-prompts/${id}`, data),
+
+  // OCR 对比测试
+  setOcrLLMConfig: (id) => adminHttp.post(`/admin/llm-configs/${id}/set-ocr`),
+  compareLLM: (formData) => adminHttp.post('/admin/llm-configs/compare', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
 }

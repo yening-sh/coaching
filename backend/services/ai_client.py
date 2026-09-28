@@ -182,8 +182,8 @@ def correct_homework(db: Session, image_urls: list[str], subject: str, grade_lev
         GeneralPrompt.is_active == True,
     ).first()
 
-    if output_schema == "summary":
-        # summary 的词汇积累和识别文本已内置于 prompt，general prompt 只追加红色文字规则
+    if output_schema in ("summary", "cloze_md"):
+        # summary/cloze_md 的词汇积累和识别文本已内置于 prompt，general prompt 只追加红色文字规则
         if general:
             prompt += "\n\n【通用补充规则】红色文字识别：如果图片中同时存在黑色/蓝色文字和红色文字，红色是老师或学生的批改标注，请忽略红色内容，只批改黑色/蓝色的学生原始作答。"
     else:
@@ -193,8 +193,8 @@ def correct_homework(db: Session, image_urls: list[str], subject: str, grade_lev
     # 追加 ocr_text + vocabulary 要求（供后续双模型改造用）
     if output_schema == "translation":
         prompt += "\n\n另外，请将返回格式改为：{\"items\": [...原数组内容...], \"ocr_text\": \"图片中识别到的全部文字\"}"
-    elif output_schema != "summary":
-        # summary 的识别文本已内置于 prompt
+    elif output_schema not in ("summary", "cloze_md"):
+        # summary/cloze_md 的识别文本已内置于 prompt
         prompt += "\n\n另外，请在返回的 JSON 中额外加入以下两个字段：\n1. \"ocr_text\"：你从图片中识别到的全部文字（原文照录，不作修改）。\n2. \"vocabulary\"：题目印刷文字（非学生作答）中出现的高中及以上水平英语词汇，数组格式，每项包含 \"word\"（词汇原形）、\"meaning\"（语境含义，中文）、\"note\"（语法/用法知识点，无则为空字符串）。如无高中及以上词汇则为空数组。"
 
     raw, tok_in, tok_out = call_llm(config, prompt, image_urls, max_tokens=16000)
@@ -233,6 +233,27 @@ def correct_homework(db: Session, image_urls: list[str], subject: str, grade_lev
         result = json.loads(match.group()) if match else {"score": 0, "overall": raw, "sentences": [], "revised": "", "suggestions": "", "model_essay": ""}
         all_correct = result.get("score", 0) >= 18
         ocr_text = result.get("ocr_text", "") if isinstance(result, dict) else ""
+    elif output_schema == "cloze_md":
+        # 十一选十 Markdown 自由输出
+        # LLM 有时会把 Markdown 包在 JSON 里，尝试剥离
+        md_text = raw
+        if raw.strip().startswith("{"):
+            try:
+                obj = json.loads(re.search(r'\{.*\}', raw, re.DOTALL).group())
+                # 取所有字符串值里最长的那个作为 Markdown 内容（key 名不固定）
+                str_values = [v for v in obj.values() if isinstance(v, str) and len(v) > 50]
+                if str_values:
+                    md_text = max(str_values, key=len)
+            except Exception:
+                pass
+        ocr_match = re.search(r'##\s*识别文本\s*\n(.*)', md_text, re.DOTALL)
+        if ocr_match:
+            ocr_text = ocr_match.group(1).strip()
+            result = {"feedback": md_text[:ocr_match.start()].rstrip()}
+        else:
+            ocr_text = ""
+            result = {"feedback": md_text}
+        all_correct = True
     elif output_schema in ("grammar", "cloze"):
         # 期望返回 JSON 对象，含 total_score/full_score/blanks 等
         full_score_default = 15 if output_schema == "grammar" else 10

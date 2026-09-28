@@ -323,7 +323,7 @@
           </div>
           <div class="row-label">原句</div>
           <div class="row-content original">{{ blank.sentence }}</div>
-          <div style="display:flex;gap:8px;margin-top:8px">
+          <div style="display:flex;gap:8px;margin-top:8px;margin-bottom:12px">
             <div style="flex:1">
               <div class="row-label">你的答案</div>
               <div class="row-content" :class="blank.is_correct ? 'student' : 'student wrong'">{{ blank.student_answer }}</div>
@@ -333,18 +333,7 @@
               <div class="row-content corrected">{{ blank.correct_answer }}</div>
             </div>
           </div>
-          <div class="row-label">考点</div>
-          <div class="row-content key-point">💡 {{ blank.key_point }}</div>
-          <template v-if="blank.key_point_explanation">
-            <div class="row-label">📖 知识点讲解</div>
-            <div style="background:#FAFAFA;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.8;color:#374151;border:1px solid #F3F4F6">{{ blank.key_point_explanation }}</div>
-          </template>
-          <template v-if="!blank.is_correct && blank.error_detail">
-            <div class="row-label">错因</div>
-            <div class="row-content feedback">{{ blank.error_detail }}</div>
-          </template>
-          <div class="row-label">解析</div>
-          <div class="row-content" style="background:#F0F9FF;color:#0369A1;font-size:13px">{{ blank.analysis }}</div>
+          <div class="markdown-body cloze-analysis" v-html="renderMarkdown(blank.analysis)"></div>
         </div>
 
         <!-- 错误统计 -->
@@ -362,19 +351,15 @@
         </div>
 
         <!-- 能力短板 -->
-        <div class="card" v-if="record.result.weakness_diagnosis?.length">
+        <div class="card" v-if="record.result.weakness_diagnosis">
           <div class="card-title">🎯 能力短板</div>
-          <div v-for="(w, i) in record.result.weakness_diagnosis" :key="i" class="improvement-line">
-            <span class="improvement-num">{{ i + 1 }}</span>{{ w }}
-          </div>
+          <div class="markdown-body" v-html="renderMarkdown(record.result.weakness_diagnosis)"></div>
         </div>
 
         <!-- 提升建议 -->
-        <div class="card" v-if="record.result.improvement_suggestions?.length">
+        <div class="card" v-if="record.result.improvement_suggestions">
           <div class="card-title">🚀 提升建议</div>
-          <div v-for="(tip, i) in record.result.improvement_suggestions" :key="i" class="improvement-line">
-            <span class="improvement-num">{{ i + 1 }}</span>{{ tip }}
-          </div>
+          <div class="markdown-body" v-html="renderMarkdown(record.result.improvement_suggestions)"></div>
         </div>
       </template>
 
@@ -394,6 +379,12 @@
           </div>
         </div>
 
+        <!-- 选项预处理表 -->
+        <div class="card" v-if="record.result.options_table">
+          <div class="card-title">📋 选项预处理</div>
+          <div class="markdown-body" v-html="renderMarkdown(record.result.options_table)"></div>
+        </div>
+
         <!-- 逐空批改 -->
         <div v-for="blank in record.result.blanks" :key="blank.number" class="item-card">
           <div class="item-header">
@@ -402,12 +393,9 @@
               <el-tag :type="blank.is_correct ? 'success' : 'danger'" size="small">
                 {{ blank.is_correct ? '✓ 正确' : '✗ 错误' }}
               </el-tag>
-              <span style="font-size:12px;color:#6B7280">{{ blank.score }} 分</span>
             </div>
           </div>
-          <div class="row-label">原句</div>
-          <div class="row-content original">{{ blank.sentence }}</div>
-          <div style="display:flex;gap:8px;margin-top:8px">
+          <div style="display:flex;gap:8px;margin-bottom:12px">
             <div style="flex:1">
               <div class="row-label">你的答案</div>
               <div class="row-content" :class="blank.is_correct ? 'student' : 'student wrong'">{{ blank.student_answer }}</div>
@@ -417,54 +405,26 @@
               <div class="row-content corrected">{{ blank.correct_answer }}</div>
             </div>
           </div>
-          <div class="row-label">考点</div>
-          <div class="row-content key-point">💡 {{ blank.key_point }}</div>
-          <template v-if="blank.key_point_explanation">
-            <div class="row-label">📖 知识点讲解</div>
-            <div style="background:#FAFAFA;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.8;color:#374151;border:1px solid #F3F4F6">{{ blank.key_point_explanation }}</div>
-          </template>
-          <template v-if="!blank.is_correct && blank.error_detail">
-            <div class="row-label">错因</div>
-            <div class="row-content feedback">
-              <span v-if="blank.error_type" class="cloze-error-type">{{ blank.error_type }}</span>
-              {{ blank.error_detail }}
-            </div>
-          </template>
-          <div class="row-label">解析</div>
-          <div class="row-content" style="background:#F0F9FF;color:#0369A1;font-size:13px">{{ blank.analysis }}</div>
+          <div class="markdown-body cloze-analysis" v-html="renderMarkdown(blank.analysis)"></div>
         </div>
 
-        <!-- 错误统计 -->
-        <div class="card" v-if="record.result.error_stats?.length">
-          <div class="card-title">📊 错误统计</div>
-          <div v-for="(es, i) in record.result.error_stats" :key="i" class="error-stat-row">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <span style="font-size:13px;font-weight:500;color:#1F2937">{{ es.type }}</span>
-              <span class="error-count-badge">{{ es.count }} 处</span>
-            </div>
-            <div v-if="es.blank_numbers?.length" style="font-size:12px;color:#9CA3AF;margin-top:2px">
-              第 {{ es.blank_numbers.join('、') }} 空
-            </div>
-            <div v-if="es.examples?.length" style="font-size:12px;color:#6B7280;margin-top:2px">
-              例：{{ es.examples.join('、') }}
-            </div>
-          </div>
+        <!-- 全文复核 -->
+        <div class="card" v-if="record.result.full_review">
+          <div class="card-title">🔍 全文复核</div>
+          <div class="markdown-body" v-html="renderMarkdown(record.result.full_review)"></div>
         </div>
 
-        <!-- 能力短板 -->
-        <div class="card" v-if="record.result.weakness_diagnosis?.length">
-          <div class="card-title">🎯 能力短板</div>
-          <div v-for="(w, i) in record.result.weakness_diagnosis" :key="i" class="improvement-line">
-            <span class="improvement-num">{{ i + 1 }}</span>{{ w }}
-          </div>
+        <!-- 能力诊断 -->
+        <div class="card" v-if="record.result.diagnosis">
+          <div class="card-title">🎯 能力诊断</div>
+          <div class="markdown-body" v-html="renderMarkdown(record.result.diagnosis)"></div>
         </div>
+      </template>
 
-        <!-- 提升建议 -->
-        <div class="card" v-if="record.result.improvement_suggestions?.length">
-          <div class="card-title">🚀 提升建议</div>
-          <div v-for="(tip, i) in record.result.improvement_suggestions" :key="i" class="improvement-line">
-            <span class="improvement-num">{{ i + 1 }}</span>{{ tip }}
-          </div>
+      <!-- ── 十一选十 Markdown 版（v2+） ── -->
+      <template v-else-if="isClozeMarkdown">
+        <div class="card">
+          <div class="markdown-body cloze-md-body" v-html="renderMarkdown(record.result?.feedback)"></div>
         </div>
       </template>
 
@@ -529,6 +489,7 @@ const isEssay = computed(() => record.value?.output_schema === 'essay')
 const isEssayV2 = computed(() => record.value?.output_schema === 'essay' && record.value?.result?.grade_level !== undefined)
 const isGrammar = computed(() => record.value?.output_schema === 'grammar')
 const isCloze = computed(() => record.value?.output_schema === 'cloze')
+const isClozeMarkdown = computed(() => record.value?.output_schema === 'cloze_md')
 
 function renderMarkdown(text) {
   return marked.parse(text || '')
@@ -819,6 +780,10 @@ onMounted(loadRecord)
 .markdown-body td { padding:6px 10px; border:1px solid #E5E7EB; }
 .markdown-body hr { border:none; border-top:1px solid #E5E7EB; margin:12px 0; }
 .markdown-body strong { font-weight:700; color:#111827; }
+/* 十一选十逐空分析 Markdown */
+.cloze-analysis { background:#FAFAFA; border-radius:10px; padding:12px 14px; border:1px solid #F3F4F6; }
+.cloze-analysis strong { color:#1D4ED8; }
+.cloze-analysis blockquote { background:#F0F9FF; border-left:3px solid #3B82F6; }
 /* 图片全屏预览 */
 .img-preview-mask {
   position:fixed; inset:0; background:rgba(0,0,0,0.85);

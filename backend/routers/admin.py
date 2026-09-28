@@ -2,11 +2,11 @@
 后台管理接口：账号管理、LLM配置、Token统计
 所有接口需要 admin 权限
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime, timedelta
 
 from database import get_db
@@ -299,6 +299,7 @@ def list_llm_configs(
             "model_id": c.model_id,
             "api_base_url": c.api_base_url,
             "is_active": c.is_active,
+            "is_ocr": c.is_ocr or False,
             "price_input": c.price_input,
             "price_output": c.price_output,
             "price_currency": c.price_currency or "CNY",
@@ -322,6 +323,52 @@ def create_llm_config(
     db.commit()
     db.refresh(config)
     return {"id": config.id, "message": "配置已添加"}
+
+
+@router.post("/llm-configs/compare")
+async def compare_llm(
+    files: List[UploadFile] = File(...),
+    prompt: str = Form("请识别图片中的所有文字，原文照录。"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """上传图片，同时调用两个已选对比模型，返回两侧输出供对比"""
+    from services import storage, ai_client as _ai
+
+    ocr_configs = db.query(LLMConfig).filter(LLMConfig.is_ocr == True).all()
+    if len(ocr_configs) < 2:
+        raise HTTPException(status_code=400, detail="请先在AI模型配置页面选择2个对比模型（点击「对比」按钮开启）")
+
+    config_a, config_b = ocr_configs[0], ocr_configs[1]
+    image_urls = []
+    for f in files:
+        url = await storage.upload_image(f)
+        image_urls.append(url)
+
+    import time
+
+    def call_one(config):
+        t0 = time.time()
+        try:
+            text, tok_in, tok_out = _ai.call_llm(config, prompt, image_urls, max_tokens=4096)
+            return {"text": text, "tok_in": tok_in, "tok_out": tok_out,
+                    "elapsed": round(time.time() - t0, 2), "error": None}
+        except Exception as e:
+            return {"text": "", "tok_in": 0, "tok_out": 0,
+                    "elapsed": round(time.time() - t0, 2), "error": str(e)}
+
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        fut_a = pool.submit(call_one, config_a)
+        fut_b = pool.submit(call_one, config_b)
+        res_a = fut_a.result()
+        res_b = fut_b.result()
+
+    return {
+        "image_urls": image_urls,
+        "model_a": {"name": config_a.name, "model_id": config_a.model_id, **res_a},
+        "model_b": {"name": config_b.name, "model_id": config_b.model_id, **res_b},
+    }
 
 
 @router.post("/llm-configs/{config_id}/activate")
@@ -420,6 +467,28 @@ def test_llm_config(
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/llm-configs/{config_id}/set-ocr")
+def set_ocr_llm_config(
+    config_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    config = db.query(LLMConfig).filter(LLMConfig.id == config_id).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="配置不存在")
+    if config.is_ocr:
+        # 已开启 → 关闭
+        config.is_ocr = False
+    else:
+        # 未开启 → 检查当前已开启数量
+        ocr_count = db.query(LLMConfig).filter(LLMConfig.is_ocr == True).count()
+        if ocr_count >= 2:
+            raise HTTPException(status_code=400, detail="最多只能同时开启2个对比模型，请先关闭其中一个")
+        config.is_ocr = True
+    db.commit()
+    return {"is_ocr": config.is_ocr, "name": config.name}
 
 
 # ==================== Token 统计 ====================

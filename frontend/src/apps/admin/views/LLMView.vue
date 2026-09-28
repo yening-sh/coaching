@@ -10,11 +10,14 @@
 
     <el-card>
       <el-table :data="configs" v-loading="loading" stripe>
-        <el-table-column label="状态" width="80">
+        <el-table-column label="状态" width="130">
           <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
-              {{ row.is_active ? '激活' : '停用' }}
-            </el-tag>
+            <div style="display:flex;gap:4px;flex-wrap:wrap">
+              <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+                {{ row.is_active ? '激活' : '停用' }}
+              </el-tag>
+              <el-tag v-if="row.is_ocr" type="warning" size="small">对比</el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="name" label="名称" width="140" />
@@ -37,13 +40,15 @@
           </template>
         </el-table-column>
         <el-table-column prop="note" label="备注" min-width="80" />
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
             <div class="action-btns">
               <el-button size="small" type="success" @click="openEdit(row)">编辑</el-button>
               <el-button size="small" type="warning" @click="test(row)" :loading="testingId === row.id">测试</el-button>
               <el-button v-if="!row.is_active" size="small" type="primary" @click="activate(row)">激活</el-button>
               <el-button v-else size="small" disabled>已激活</el-button>
+              <el-button v-if="!row.is_ocr" size="small" @click="setOcr(row)" style="background:#FFF7ED;color:#C2410C;border-color:#FED7AA">对比</el-button>
+              <el-button v-else size="small" @click="setOcr(row)" style="background:#C2410C;color:#fff;border-color:#C2410C">对比✓</el-button>
               <el-button size="small" type="danger" :disabled="row.is_active" @click="remove(row)">删除</el-button>
             </div>
           </template>
@@ -204,6 +209,16 @@ async function activate(row) {
   loadConfigs()
 }
 
+async function setOcr(row) {
+  try {
+    const res = await adminApi.setOcrLLMConfig(row.id)
+    ElMessage.success(res.is_ocr ? `已将「${res.name}」加入对比` : `已将「${res.name}」移出对比`)
+    loadConfigs()
+  } catch (e) {
+    ElMessage.error(e?.detail || '操作失败')
+  }
+}
+
 async function remove(row) {
   await ElMessageBox.confirm(`确认删除「${row.name}」？`, '确认删除', { type: 'danger' })
   await adminApi.deleteLLMConfig(row.id)
@@ -217,6 +232,6 @@ onMounted(loadConfigs)
 <style scoped>
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
 .page-header h2 { margin:0; font-size:20px; }
-.action-btns { display:flex; gap:6px; align-items:center; }
-.action-btns .el-button { width:64px; margin:0; }
+.action-btns { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.action-btns .el-button { margin:0; }
 </style>

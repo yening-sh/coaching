@@ -40,6 +40,7 @@ const router = createRouter({
         { path: 'exercise-types', component: () => import('@/apps/admin/views/ExerciseTypesView.vue') },
         { path: 'exercise-types/:typeId', component: () => import('@/apps/admin/views/ExerciseTypeDetailView.vue') },
         { path: 'general-prompts', component: () => import('@/apps/admin/views/GeneralPromptsView.vue') },
+        { path: 'ocr-test', component: () => import('@/apps/admin/views/OcrTestView.vue') },
       ]
     },
 

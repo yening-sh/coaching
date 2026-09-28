@@ -138,7 +138,7 @@ def get_thinking(
 @router.get("/recent")
 def get_recent(
     subject: str = None,
-    limit: int = 10,
+    limit: int = 100,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

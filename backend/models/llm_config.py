@@ -15,6 +15,7 @@ class LLMConfig(Base):
     api_key = Column(Text)                               # 加密存储（MVP阶段明文，后续加密）
     api_base_url = Column(String(300))                   # 自定义endpoint，部分模型需要
     is_active = Column(Boolean, default=False)           # 当前激活的只能有一个
+    is_ocr = Column(Boolean, default=False)              # OCR对比测试专用模型
     price_input = Column(Float, default=0)               # 每百万token价格
     price_output = Column(Float, default=0)
     price_currency = Column(String(3), default="CNY")    # USD 或 CNY
