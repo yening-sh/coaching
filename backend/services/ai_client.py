@@ -119,7 +119,7 @@ def _local_path_to_data_url(image_url: str) -> str:
 
 def _call_openai(config: LLMConfig, prompt: str, image_urls: list[str], max_tokens: int = 1024) -> tuple[str, int, int]:
     from openai import OpenAI
-    client = OpenAI(api_key=config.api_key, base_url=config.api_base_url or None)
+    client = OpenAI(api_key=config.api_key, base_url=config.api_base_url or None, timeout=600.0)
 
     content = []
     for url in image_urls:
@@ -131,7 +131,7 @@ def _call_openai(config: LLMConfig, prompt: str, image_urls: list[str], max_toke
     kwargs = dict(model=config.model_id, messages=[{"role": "user", "content": content}])
     # o-series / reasoning models require max_completion_tokens; standard models use max_tokens
     model_id = config.model_id.lower()
-    use_completion_tokens = any(model_id.startswith(p) for p in ("o1", "o3", "o4", "gpt-5", "gpt-o"))
+    use_completion_tokens = any(model_id.startswith(p) for p in ("o1", "o3", "o4", "gpt-5", "gpt-6", "gpt-o"))
     try:
         if use_completion_tokens:
             response = client.chat.completions.create(**kwargs, max_completion_tokens=max_tokens)
@@ -159,42 +159,59 @@ def correct_homework(db: Session, image_urls: list[str], subject: str, grade_lev
     subj = SUBJECT_NAMES.get(subject, subject)
 
     if exercise_type:
-        # 优先用该题型下激活的 prompt 版本
+        # 按 prompt_type 分段查询激活的 prompt
         from models.exercise_type_prompt import ExerciseTypePrompt
-        active_prompt = db.query(ExerciseTypePrompt).filter(
+        active_prompts = db.query(ExerciseTypePrompt).filter(
             ExerciseTypePrompt.exercise_type_id == exercise_type.id,
             ExerciseTypePrompt.is_active == True,
-        ).first()
-        prompt_tpl = active_prompt.prompt_template if active_prompt else exercise_type.prompt_template
-        prompt = prompt_tpl.replace("{grade}", grade).replace("{subject}", subj)
+        ).all()
+        ex_prompt_map = {p.prompt_type: p.prompt_template for p in active_prompts}
         output_schema = exercise_type.output_schema
     else:
-        prompt = CORRECT_PROMPT.format(grade=grade, subject=subj)
+        ex_prompt_map = {}
         output_schema = "simple"
+
+    # 查询 general prompts（按 subject + grade_level，三种类型）
+    general_prompts_list = db.query(GeneralPrompt).filter(
+        GeneralPrompt.subject == subject,
+        GeneralPrompt.grade_level == grade_level,
+        GeneralPrompt.is_active == True,
+    ).all()
+    gen_prompt_map = {g.prompt_type: g.prompt_template for g in general_prompts_list}
+
+    def _render(tpl):
+        return tpl.replace("{grade}", grade).replace("{subject}", subj)
+
+    # 按 general_ocr + ocr → general_grading + grading → general_coaching + coaching 顺序拼接
+    parts = []
+    for ptype in ("ocr", "grading", "coaching"):
+        section = []
+        if ptype in gen_prompt_map:
+            section.append(_render(gen_prompt_map[ptype]))
+        if ptype in ex_prompt_map:
+            section.append(_render(ex_prompt_map[ptype]))
+        if section:
+            parts.append("\n\n".join(section))
+
+    # 兼容旧数据：如果完全没有分类 prompt，回退到 exercise_type.prompt_template
+    if not parts:
+        if exercise_type:
+            parts = [_render(exercise_type.prompt_template or "")]
+        else:
+            parts = [CORRECT_PROMPT.format(grade=grade, subject=subj)]
+
+    prompt = "\n\n---\n\n".join(parts)
 
     if len(image_urls) > 1:
         prompt = f"以下共 {len(image_urls)} 张图片，请自行判断哪些是题目、哪些是学生的手写作答，然后进行批改。\n\n" + prompt
 
-    # 追加通用 prompt 模版（按 subject + grade_level 匹配）
-    general = db.query(GeneralPrompt).filter(
-        GeneralPrompt.subject == subject,
-        GeneralPrompt.grade_level == grade_level,
-        GeneralPrompt.is_active == True,
-    ).first()
-
+    # schema 附加要求（放在最后）
     if output_schema in ("summary", "cloze_md"):
-        # summary/cloze_md 的词汇积累和识别文本已内置于 prompt，general prompt 只追加红色文字规则
-        if general:
-            prompt += "\n\n【通用补充规则】红色文字识别：如果图片中同时存在黑色/蓝色文字和红色文字，红色是老师或学生的批改标注，请忽略红色内容，只批改黑色/蓝色的学生原始作答。"
-    else:
-        if general:
-            prompt += "\n\n" + general.prompt_template
-
-    # 追加 ocr_text + vocabulary 要求（供后续双模型改造用）
-    if output_schema == "translation":
+        if output_schema == "cloze_md":
+            prompt += "\n\n最后，在你输出内容的最末尾，另起一行输出：\n\n## 识别文本\n\n[照录图片中所有印刷文字和学生手写答案，原文不作修改]"
+    elif output_schema == "translation":
         prompt += "\n\n另外，请将返回格式改为：{\"items\": [...原数组内容...], \"ocr_text\": \"图片中识别到的全部文字\"}"
-    elif output_schema not in ("summary", "cloze_md"):
-        # summary/cloze_md 的识别文本已内置于 prompt
+    else:
         prompt += "\n\n另外，请在返回的 JSON 中额外加入以下两个字段：\n1. \"ocr_text\"：你从图片中识别到的全部文字（原文照录，不作修改）。\n2. \"vocabulary\"：题目印刷文字（非学生作答）中出现的高中及以上水平英语词汇，数组格式，每项包含 \"word\"（词汇原形）、\"meaning\"（语境含义，中文）、\"note\"（语法/用法知识点，无则为空字符串）。如无高中及以上词汇则为空数组。"
 
     raw, tok_in, tok_out = call_llm(config, prompt, image_urls, max_tokens=16000)

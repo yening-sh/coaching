@@ -350,7 +350,7 @@ async def compare_llm(
     def call_one(config):
         t0 = time.time()
         try:
-            text, tok_in, tok_out = _ai.call_llm(config, prompt, image_urls, max_tokens=4096)
+            text, tok_in, tok_out = _ai.call_llm(config, prompt, image_urls, max_tokens=8192)
             return {"text": text, "tok_in": tok_in, "tok_out": tok_out,
                     "elapsed": round(time.time() - t0, 2), "error": None}
         except Exception as e:
@@ -711,11 +711,13 @@ def delete_exercise_type(
 class PromptVersionRequest(BaseModel):
     version_name: str
     prompt_template: str
+    prompt_type: str = "grading"  # ocr / grading / coaching
 
 
 class UpdatePromptVersionRequest(BaseModel):
     version_name: Optional[str] = None
     prompt_template: Optional[str] = None
+    prompt_type: Optional[str] = None
 
 
 @router.get("/exercise-types/{type_id}/prompts")
@@ -735,6 +737,7 @@ def list_prompt_versions(
         "prompts": [
             {
                 "id": p.id,
+                "prompt_type": p.prompt_type,
                 "version_name": p.version_name,
                 "prompt_template": p.prompt_template,
                 "is_active": p.is_active,
@@ -757,6 +760,7 @@ def create_prompt_version(
         raise HTTPException(status_code=404, detail="题型不存在")
     p = ExerciseTypePrompt(
         exercise_type_id=type_id,
+        prompt_type=req.prompt_type,
         version_name=req.version_name,
         prompt_template=req.prompt_template,
         is_active=False,
@@ -800,9 +804,10 @@ def activate_prompt_version(
     ).first()
     if not p:
         raise HTTPException(status_code=404, detail="版本不存在")
-    # 先关闭同题型下所有版本
+    # 先关闭同题型同类型下所有版本（不影响其他 prompt_type）
     db.query(ExerciseTypePrompt).filter(
-        ExerciseTypePrompt.exercise_type_id == type_id
+        ExerciseTypePrompt.exercise_type_id == type_id,
+        ExerciseTypePrompt.prompt_type == p.prompt_type,
     ).update({"is_active": False})
     p.is_active = True
     db.commit()
@@ -834,6 +839,7 @@ def delete_prompt_version(
 class GeneralPromptCreate(BaseModel):
     subject: str
     grade_level: str
+    prompt_type: str = "grading"  # ocr / grading / coaching
     prompt_template: str
 
 
@@ -845,6 +851,7 @@ class GeneralPromptUpdate(BaseModel):
 SUBJECT_NAMES = {"english": "英语", "math": "数学", "chinese": "语文",
                  "physics": "物理", "chemistry": "化学", "biology": "生物"}
 GRADE_NAMES = {"senior": "高中", "junior": "初中", "all": "全部"}
+PROMPT_TYPE_NAMES = {"ocr": "OCR识别", "grading": "批改", "coaching": "辅导"}
 
 
 @router.get("/general-prompts")
@@ -861,6 +868,8 @@ def list_general_prompts(
             "subject_label": SUBJECT_NAMES.get(g.subject, g.subject),
             "grade_level": g.grade_level,
             "grade_label": GRADE_NAMES.get(g.grade_level, g.grade_level),
+            "prompt_type": g.prompt_type,
+            "prompt_type_label": PROMPT_TYPE_NAMES.get(g.prompt_type, g.prompt_type),
             "prompt_template": g.prompt_template,
             "is_active": g.is_active,
             "created_at": g.created_at.isoformat() if g.created_at else None,
@@ -877,12 +886,14 @@ def create_general_prompt(
     existing = db.query(GeneralPrompt).filter(
         GeneralPrompt.subject == req.subject,
         GeneralPrompt.grade_level == req.grade_level,
+        GeneralPrompt.prompt_type == req.prompt_type,
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="该科目/年级组合已存在通用模版")
+        raise HTTPException(status_code=400, detail="该科目/年级/类型组合已存在通用模版")
     g = GeneralPrompt(
         subject=req.subject,
         grade_level=req.grade_level,
+        prompt_type=req.prompt_type,
         prompt_template=req.prompt_template,
     )
     db.add(g)

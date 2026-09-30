@@ -10,37 +10,53 @@
       <el-button type="primary" @click="openCreate">+ 新增版本</el-button>
     </div>
 
-    <el-card v-loading="loading">
-      <el-table :data="versions" stripe>
-        <el-table-column label="激活" width="70">
-          <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
-              {{ row.is_active ? '激活' : '未激活' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="版本名称" width="160" prop="version_name" />
-        <el-table-column label="创建时间" min-width="180">
-          <template #default="{ row }">
-            {{ formatTime(row.created_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" min-width="200" fixed="right">
-          <template #default="{ row }">
-            <div class="action-btns">
-              <el-button size="small" type="success" @click="openEdit(row)">编辑</el-button>
-              <el-button size="small" type="primary" v-if="!row.is_active" @click="activate(row)">激活</el-button>
-              <el-button size="small" disabled v-else>已激活</el-button>
-              <el-button size="small" type="danger" :disabled="row.is_active" @click="remove(row)">删除</el-button>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <!-- 三类 prompt tab -->
+    <el-tabs v-model="activeTab" class="prompt-tabs">
+      <el-tab-pane
+        v-for="pt in PROMPT_TYPES"
+        :key="pt.value"
+        :label="pt.label"
+        :name="pt.value"
+      >
+        <el-card v-loading="loading">
+          <el-table :data="versionsForTab(pt.value)" stripe>
+            <el-table-column label="激活" width="70">
+              <template #default="{ row }">
+                <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+                  {{ row.is_active ? '激活' : '未激活' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="版本名称" width="160" prop="version_name" />
+            <el-table-column label="创建时间" min-width="180">
+              <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" min-width="200" fixed="right">
+              <template #default="{ row }">
+                <div class="action-btns">
+                  <el-button size="small" type="success" @click="openEdit(row)">编辑</el-button>
+                  <el-button size="small" type="primary" v-if="!row.is_active" @click="activate(row)">激活</el-button>
+                  <el-button size="small" disabled v-else>已激活</el-button>
+                  <el-button size="small" type="danger" :disabled="row.is_active" @click="remove(row)">删除</el-button>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="versionsForTab(pt.value).length === 0" class="empty-hint">
+            暂无版本，点击右上角「+ 新增版本」添加
+          </div>
+        </el-card>
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 新增/编辑弹窗 -->
     <el-dialog v-model="dialog" :title="editingId ? '编辑版本' : '新增版本'" width="700px">
       <el-form :model="form" label-width="100px">
+        <el-form-item label="类型">
+          <el-select v-model="form.prompt_type" :disabled="!!editingId">
+            <el-option v-for="pt in PROMPT_TYPES" :key="pt.value" :label="pt.label" :value="pt.value" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="版本名称">
           <el-input v-model="form.version_name" placeholder="如：v1 初版、v2 更详细" />
         </el-form-item>
@@ -68,6 +84,11 @@ import { adminApi } from '@/api/index'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const SUBJECT_NAMES = { math:'数学', chinese:'语文', english:'英语', physics:'物理', chemistry:'化学', biology:'生物' }
+const PROMPT_TYPES = [
+  { value: 'ocr',      label: 'OCR识别 Prompt' },
+  { value: 'grading',  label: '批改 Prompt' },
+  { value: 'coaching', label: '辅导 Prompt' },
+]
 
 const route = useRoute()
 const typeId = route.params.typeId
@@ -78,12 +99,16 @@ const exerciseType = ref(null)
 const versions = ref([])
 const dialog = ref(false)
 const editingId = ref(null)
-const form = ref({ version_name: '', prompt_template: '' })
+const activeTab = ref('ocr')
+const form = ref({ prompt_type: 'ocr', version_name: '', prompt_template: '' })
+
+function versionsForTab(type) {
+  return versions.value.filter(v => v.prompt_type === type)
+}
 
 function formatTime(iso) {
   if (!iso) return ''
   const d = new Date(iso)
-  // Assume UTC stored, convert to Beijing time
   const bj = new Date(d.getTime() + 8 * 3600 * 1000)
   return bj.toISOString().replace('T', ' ').slice(0, 16)
 }
@@ -103,13 +128,13 @@ async function load() {
 
 function openCreate() {
   editingId.value = null
-  form.value = { version_name: '', prompt_template: '' }
+  form.value = { prompt_type: activeTab.value, version_name: '', prompt_template: '' }
   dialog.value = true
 }
 
 function openEdit(row) {
   editingId.value = row.id
-  form.value = { version_name: row.version_name, prompt_template: row.prompt_template }
+  form.value = { prompt_type: row.prompt_type, version_name: row.version_name, prompt_template: row.prompt_template }
   dialog.value = true
 }
 
@@ -166,4 +191,6 @@ onMounted(load)
 .page-header h2 { margin:0; font-size:20px; }
 .action-btns { display:flex; gap:6px; align-items:center; }
 .action-btns .el-button { width:64px; margin:0; }
+.prompt-tabs { margin-top:0; }
+.empty-hint { text-align:center; color:#9CA3AF; padding:32px 0; font-size:14px; }
 </style>

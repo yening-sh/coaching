@@ -61,7 +61,7 @@
                 <span style="font-size:28px;font-weight:800;color:#1F2937">{{ record.result.estimated_score }}</span>
                 <span style="font-size:14px;color:#9CA3AF">/ {{ record.result.full_score }} 分</span>
               </div>
-              <div style="font-size:12px;color:#6B7280;line-height:1.5">{{ record.result.grade_reason }}</div>
+              <div style="font-size:12px;color:#6B7280;line-height:1.5" v-html="renderMarkdown(record.result.grade_reason)"></div>
             </div>
           </div>
           <!-- 三维度分项 -->
@@ -147,15 +147,20 @@
         <!-- 总评 -->
         <div class="card" v-if="record.result.overall_comment">
           <div class="card-title">💬 总评</div>
-          <div class="overall-text">{{ record.result.overall_comment }}</div>
+          <div class="markdown-body overall-text" v-html="renderMarkdown(record.result.overall_comment)"></div>
         </div>
 
         <!-- 提档建议 -->
         <div class="card" v-if="record.result.improvement_path?.length">
           <div class="card-title">🚀 提档建议</div>
-          <div v-for="(tip, i) in record.result.improvement_path" :key="i" class="improvement-line">
-            <span class="improvement-num">{{ i + 1 }}</span>{{ tip }}
-          </div>
+          <template v-if="typeof record.result.improvement_path === 'string'">
+            <div class="markdown-body" v-html="renderMarkdown(record.result.improvement_path)"></div>
+          </template>
+          <template v-else>
+            <div v-for="(tip, i) in record.result.improvement_path" :key="i" class="improvement-line">
+              <span class="improvement-num">{{ i + 1 }}</span>{{ tip }}
+            </div>
+          </template>
         </div>
 
         <!-- 修正版全文 -->
@@ -248,8 +253,7 @@
         <!-- 整体建议 -->
         <div class="card">
           <div class="card-title">💡 整体建议</div>
-          <div v-for="(line, i) in (record.result.suggestions || '').split('\n').filter(l => l.trim())" :key="i"
-            class="suggestion-line">{{ line }}</div>
+          <div class="markdown-body" v-html="renderMarkdown(record.result.suggestions)"></div>
         </div>
 
         <!-- 范文 -->
@@ -274,18 +278,12 @@
           <div class="row-content student" :class="{ wrong: !item.is_correct }">{{ item.student_answer }}</div>
           <template v-if="!item.is_correct">
             <div class="row-label">批改意见</div>
-            <div class="row-content feedback">
-              <div v-for="(line, i) in item.feedback.split('\n').filter(l => l.trim())" :key="i"
-                :style="i > 0 ? 'margin-top:6px' : ''">{{ line }}</div>
-            </div>
+            <div class="row-content feedback markdown-body" v-html="renderMarkdown(item.feedback)"></div>
             <div class="row-label">参考答案</div>
             <div class="row-content corrected">{{ item.corrected }}</div>
           </template>
           <template v-else>
-            <div class="row-content feedback correct-tip">
-              <div v-for="(line, i) in item.feedback.split('\n').filter(l => l.trim())" :key="i"
-                :style="i > 0 ? 'margin-top:6px' : ''">{{ line }}</div>
-            </div>
+            <div class="row-content feedback correct-tip markdown-body" v-html="renderMarkdown(item.feedback)"></div>
           </template>
           <template v-if="item.key_point">
             <div class="row-label">考点</div>
@@ -421,11 +419,9 @@
         </div>
       </template>
 
-      <!-- ── 十一选十 Markdown 版（v2+） ── -->
+      <!-- ── 完形填空 / cloze_md Markdown 版 ── -->
       <template v-else-if="isClozeMarkdown">
-        <div class="card">
-          <div class="markdown-body cloze-md-body" v-html="renderMarkdown(record.result?.feedback)"></div>
-        </div>
+        <div class="markdown-body cloze-md-body" v-html="renderClozeMarkdown(record.result?.feedback)"></div>
       </template>
 
       <!-- ── 通用题型：Markdown 渲染 ── -->
@@ -433,9 +429,9 @@
         <div class="card" v-if="record.result?.feedback">
           <div class="markdown-body" v-html="renderMarkdown(record.result.feedback)"></div>
         </div>
-        <div class="card" v-else-if="record.result?.hint">
-          <div class="card-title">AI 批改意见</div>
-          <p class="feedback-text">{{ record.result.hint }}</p>
+        <div class="card" v-if="record.result?.hint">
+          <div class="card-title">💡 引导提示</div>
+          <div class="markdown-body" v-html="renderMarkdown(record.result.hint)"></div>
         </div>
       </template>
 
@@ -493,6 +489,92 @@ const isClozeMarkdown = computed(() => record.value?.output_schema === 'cloze_md
 
 function renderMarkdown(text) {
   return marked.parse(text || '')
+}
+
+// section 标签配色：① 预判=绿, ② 证据=蓝, ③ 题型=紫, ④ 结论=橙, ⑤ 关键=红
+const CLOZE_SECTION_STYLES = [
+  { prefix: '① 预判', bg: '#F0FDF4', border: '#22C55E', badgeBg: '#DCFCE7', badgeColor: '#15803D' },
+  { prefix: '② 证据', bg: '#EFF6FF', border: '#3B82F6', badgeBg: '#DBEAFE', badgeColor: '#1D4ED8' },
+  { prefix: '③ 题型', bg: '#FAF5FF', border: '#A855F7', badgeBg: '#EDE9FE', badgeColor: '#6D28D9' },
+  { prefix: '④ 结论', bg: '#FFF7ED', border: '#F97316', badgeBg: '#FFEDD5', badgeColor: '#C2410C' },
+  { prefix: '⑤ 关键', bg: '#FFF1F2', border: '#F43F5E', badgeBg: '#FFE4E6', badgeColor: '#BE123C' },
+]
+
+function renderClozeMarkdown(text) {
+  if (!text) return ''
+
+  // 先处理 Markdown 文本，再交给 marked
+  let md = text
+
+  // 1. 答案行：**学生答案：**X　**正确答案：**Y　**结果：**Z
+  //    整行替换为自定义 HTML block（marked 遇到 HTML block 会原样保留）
+  md = md.replace(
+    /^\*\*学生答案[：:]\*\*(.+?)(?=\n|$)/gm,
+    (line) => {
+      const m = line.match(/\*\*学生答案[：:]\*\*\s*(.*?)\s*\*\*正确答案[：:]\*\*\s*(.*?)\s*\*\*结果[：:]\*\*\s*(.*)/)
+      if (!m) return line
+      const [, student, correct, result] = m
+      const isCorrect = result.includes('✅') || result.includes('正确')
+      const isWrong   = result.includes('❌') || result.includes('错误')
+      const b = isCorrect ? '#22C55E' : isWrong ? '#F43F5E' : '#9CA3AF'
+      const bg = isCorrect ? '#F0FDF4' : isWrong ? '#FFF1F2' : '#F9FAFB'
+      return `<div class="cloze-answer-row" style="background:${bg};border-left:4px solid ${b}">` +
+        `<span class="cloze-ans-label">学生</span><span class="cloze-ans-val">${student || '—'}</span>` +
+        `<span class="cloze-ans-sep">·</span>` +
+        `<span class="cloze-ans-label">正确</span><span class="cloze-ans-val">${correct || '—'}</span>` +
+        `<span class="cloze-ans-result">${result}</span></div>\n`
+    }
+  )
+
+  // 2. section 标签：**① 预判** 或 **③ 题型：xxx** 单独成行
+  //    转为带色块 wrapper 的开始标签，下一个 section 或 ### 触发关闭
+  const sectionPrefixes = CLOZE_SECTION_STYLES.map(s => s.prefix)
+  const sectionRe = new RegExp(
+    `^\\*\\*((?:${sectionPrefixes.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})[^*]*)\\*\\*\\s*$`,
+    'gm'
+  )
+
+  // Split by section markers, wrap each section
+  const lines = md.split('\n')
+  const result = []
+  let inSection = false
+  let seenH3 = false  // track whether we've seen the first ### (no divider before it)
+
+  for (const line of lines) {
+    // Check if this line is a section header
+    let matched = false
+    for (const s of CLOZE_SECTION_STYLES) {
+      const sectionLine = new RegExp(`^\\*\\*(${s.prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^*]*)\\*\\*\\s*$`)
+      const m = line.match(sectionLine)
+      if (m) {
+        if (inSection) result.push('</div></div>\n') // close previous + blank line
+        result.push(
+          `\n<div class="cloze-section" style="background:${s.bg};border-left:4px solid ${s.border}">` +
+          `<span class="cloze-section-badge" style="background:${s.badgeBg};color:${s.badgeColor}">${m[1]}</span>` +
+          `<div class="cloze-section-body">\n`
+        )
+        inSection = true
+        matched = true
+        break
+      }
+    }
+    if (matched) continue
+
+    // On new ### heading: close open section, insert divider (except before the very first h3)
+    if (/^###\s/.test(line)) {
+      if (inSection) {
+        result.push('\n</div></div>\n')
+        inSection = false
+      }
+      if (seenH3) result.push('\n<hr class="cloze-divider">\n')
+      seenH3 = true
+    }
+
+    result.push(line)
+  }
+  if (inSection) result.push('\n</div></div>\n')
+
+  return marked.parse(result.join('\n'))
 }
 
 const imageList = computed(() => {
@@ -784,6 +866,83 @@ onMounted(loadRecord)
 .cloze-analysis { background:#FAFAFA; border-radius:10px; padding:12px 14px; border:1px solid #F3F4F6; }
 .cloze-analysis strong { color:#1D4ED8; }
 .cloze-analysis blockquote { background:#F0F9FF; border-left:3px solid #3B82F6; }
+/* ── 完形填空 cloze_md Markdown 渲染 ── */
+.cloze-md-body { padding:0 0 16px; }
+/* 大节标题 (## 全文主线 etc) */
+.cloze-md-body h2 {
+  font-size:14px; font-weight:700; color:#374151;
+  background:#F3F4F6; border-radius:10px; padding:9px 14px;
+  margin:16px 16px 8px; border-left:4px solid #9CA3AF;
+}
+/* 每题标题 (### 第XX题) */
+.cloze-md-body h3 {
+  font-size:15px; font-weight:700; color:#111827;
+  margin:12px 16px 8px; padding:0;
+  letter-spacing:0.3px;
+}
+/* 题间分隔线 */
+.cloze-md-body hr.cloze-divider {
+  border:none; border-top:1px solid #D1D5DB;
+  margin:16px 16px 0;
+}
+/* 答案汇总行 */
+.cloze-answer-row {
+  display:flex; align-items:center; flex-wrap:wrap; gap:6px;
+  padding:8px 14px; margin:0 16px; border-radius:0 0 0 0;
+  font-size:13px;
+}
+.cloze-ans-label {
+  font-size:11px; font-weight:600; color:#9CA3AF;
+  background:#F3F4F6; border-radius:4px; padding:1px 6px;
+}
+.cloze-ans-val { font-weight:600; color:#1F2937; }
+.cloze-ans-sep { color:#D1D5DB; }
+.cloze-ans-result { font-size:15px; margin-left:auto; }
+/* section 色块 */
+.cloze-section {
+  margin:4px 16px; border-radius:8px; overflow:hidden; padding:0;
+}
+.cloze-section-badge {
+  display:inline-block; font-size:12px; font-weight:700;
+  padding:3px 10px 4px; border-radius:6px;
+  letter-spacing:0.3px; margin-bottom:6px;
+}
+.cloze-section-body {
+  padding:6px 12px 8px; font-size:13.5px; line-height:1.75; color:#374151;
+}
+.cloze-section-body p { margin:4px 0; }
+.cloze-section-body em { color:#6B7280; font-style:italic; }
+/* 原句引用块 */
+.cloze-md-body blockquote {
+  background:#FFFBEB; border-left:4px solid #F59E0B;
+  border-radius:0 8px 8px 0; padding:10px 14px;
+  margin:8px 16px; font-size:13.5px; color:#1F2937;
+  line-height:1.8;
+}
+.cloze-md-body blockquote p { margin:0; }
+/* 普通段落 */
+.cloze-md-body p {
+  font-size:13.5px; line-height:1.75; color:#374151;
+  margin:6px 16px; padding:0;
+}
+.cloze-md-body strong { color:#1D4ED8; font-weight:700; }
+/* 选项列表 */
+.cloze-md-body ul { padding:0; list-style:none; margin:4px 16px; }
+.cloze-md-body ul li {
+  padding:6px 12px; border-radius:8px; margin-bottom:3px;
+  font-size:13px; line-height:1.6; color:#374151;
+  background:#F8F9FB; border-left:3px solid #E5E7EB;
+}
+.cloze-md-body ul li strong { color:#1D4ED8; }
+/* 有序列表 */
+.cloze-md-body ol { padding-left:20px; margin:6px 16px; }
+.cloze-md-body ol li { font-size:13.5px; line-height:1.75; margin-bottom:4px; }
+/* 表格（题型统计） */
+.cloze-md-body table { width:calc(100% - 32px); margin:8px 16px; border-collapse:collapse; }
+.cloze-md-body th { background:#EFF6FF; padding:7px 10px; font-size:13px; font-weight:600; color:#1D4ED8; border:1px solid #DBEAFE; }
+.cloze-md-body td { padding:7px 10px; font-size:13px; border:1px solid #E5E7EB; }
+/* 分隔线 */
+.cloze-md-body hr { border:none; border-top:2px solid #E5E7EB; margin:12px 16px; }
 /* 图片全屏预览 */
 .img-preview-mask {
   position:fixed; inset:0; background:rgba(0,0,0,0.85);

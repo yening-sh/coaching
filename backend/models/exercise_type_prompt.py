@@ -11,9 +11,10 @@ class ExerciseTypePrompt(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     exercise_type_id = Column(String, ForeignKey("exercise_types.id"), nullable=False)
+    prompt_type = Column(String(20), nullable=False, default="grading")  # ocr / grading / coaching
     version_name = Column(String(100), nullable=False)   # 如 "v1 初版"
     prompt_template = Column(Text, nullable=False)
-    is_active = Column(Boolean, default=False)           # 同一题型只有一个激活
+    is_active = Column(Boolean, default=False)           # 同一题型同一类型只有一个激活
     created_at = Column(DateTime, default=datetime.utcnow)
 
     exercise_type = relationship("ExerciseType", back_populates="prompts")

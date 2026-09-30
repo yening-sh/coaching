@@ -10,7 +10,7 @@
     <!-- 上传区 -->
     <el-card style="margin-bottom:20px">
       <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
-        <div style="flex:1;min-width:280px">
+        <div style="flex:0 0 260px">
           <div style="margin-bottom:8px;font-size:13px;font-weight:500;color:#374151">上传图片（最多4张）</div>
           <el-upload
             v-model:file-list="fileList"
@@ -24,16 +24,20 @@
             <el-icon><Plus /></el-icon>
           </el-upload>
         </div>
-        <div style="flex:0 0 200px">
-          <div style="margin-bottom:8px;font-size:13px;font-weight:500;color:#374151">任务</div>
-          <div style="font-size:13px;color:#6B7280;background:#F9FAFB;border-radius:8px;padding:10px 12px;border:1px solid #E5E7EB">
-            识别图片中的所有文字，原文照录。
-          </div>
+        <div style="flex:1;min-width:280px">
+          <div style="margin-bottom:8px;font-size:13px;font-weight:500;color:#374151">Prompt</div>
+          <el-input
+            v-model="prompt"
+            type="textarea"
+            :rows="10"
+            placeholder="输入发给模型的指令…"
+            style="font-size:13px;font-family:ui-monospace,monospace"
+          />
           <el-button
             type="primary"
             style="margin-top:12px;width:100%"
             :loading="running"
-            :disabled="!fileList.length"
+            :disabled="!fileList.length || !prompt.trim()"
             @click="runCompare"
           >
             {{ running ? '运行中…' : '开始对比' }}
@@ -112,6 +116,27 @@ const result = ref(null)
 const previewUrl = ref(null)
 const showPreview = ref(false)
 
+const DEFAULT_PROMPT = `请识别图片中的所有文字，按以下结构输出：
+
+【题目原文】
+照录印刷体题目原文。填空题的空格处保留 (1)_____ 格式和括号内提示词，不要填入任何答案。
+
+【学生作答】
+照录学生的手写内容（黑色/蓝色笔迹），按题号对齐列出：
+(1) xxx  (2) xxx  (3) xxx ...
+
+【教师批改】
+仅列出有红笔修改的空，格式：(编号) 学生答案 → 红笔内容
+如无红色批注则写"无"。
+
+【按题号对齐】
+每空一条，格式如下：
+(1) 题干片段: "..." | 学生答案: xxx | 教师批注: xxx或无
+(2) 题干片段: "..." | 学生答案: xxx | 教师批注: xxx或无
+...`
+
+const prompt = ref(DEFAULT_PROMPT)
+
 async function runCompare() {
   if (!fileList.value.length) return
   running.value = true
@@ -121,7 +146,7 @@ async function runCompare() {
     for (const f of fileList.value) {
       formData.append('files', f.raw)
     }
-    formData.append('prompt', '请识别图片中的所有文字，原文照录。')
+    formData.append('prompt', prompt.value)
     result.value = await adminApi.compareLLM(formData)
   } catch (e) {
     ElMessage.error(e?.detail || e?.message || '请求失败')

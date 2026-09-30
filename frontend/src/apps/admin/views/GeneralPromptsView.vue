@@ -14,14 +14,19 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="年级" width="80">
+        <el-table-column label="年级" width="70">
           <template #default="{ row }">
             <el-tag size="small" type="warning">{{ row.grade_label }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="科目" width="80">
+        <el-table-column label="科目" width="70">
           <template #default="{ row }">
             <el-tag size="small">{{ row.subject_label }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" :type="typeTagType(row.prompt_type)">{{ row.prompt_type_label }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="模版预览" min-width="200">
@@ -67,6 +72,13 @@
               <el-option label="生物" value="biology" />
             </el-select>
           </el-form-item>
+          <el-form-item label="类型">
+            <el-select v-model="form.prompt_type" placeholder="选择类型">
+              <el-option label="OCR识别" value="ocr" />
+              <el-option label="批改" value="grading" />
+              <el-option label="辅导" value="coaching" />
+            </el-select>
+          </el-form-item>
         </template>
         <el-form-item label="Prompt">
           <el-input v-model="form.prompt_template" type="textarea" :rows="20"
@@ -91,7 +103,11 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
-const form = ref({ subject: '', grade_level: '', prompt_template: '' })
+const form = ref({ subject: 'english', grade_level: 'senior', prompt_type: 'grading', prompt_template: '' })
+
+function typeTagType(pt) {
+  return pt === 'ocr' ? 'info' : pt === 'grading' ? '' : 'success'
+}
 
 async function load() {
   loading.value = true
@@ -104,13 +120,13 @@ async function load() {
 
 function openCreate() {
   editingId.value = null
-  form.value = { subject: 'english', grade_level: 'senior', prompt_template: '' }
+  form.value = { subject: 'english', grade_level: 'senior', prompt_type: 'grading', prompt_template: '' }
   dialogVisible.value = true
 }
 
 function openEdit(row) {
   editingId.value = row.id
-  form.value = { subject: row.subject, grade_level: row.grade_level, prompt_template: row.prompt_template }
+  form.value = { subject: row.subject, grade_level: row.grade_level, prompt_type: row.prompt_type, prompt_template: row.prompt_template }
   dialogVisible.value = true
 }
 
